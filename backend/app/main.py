@@ -10,7 +10,8 @@ from app.routes import (
     beds,
     medicines,
     pharmacy_queue,
-    alerts
+    alerts,
+    admin_analytics
 )
 
 app = FastAPI(title="Smart e-Hospital Management System")
@@ -25,3 +26,4 @@ app.include_router(beds.router)
 app.include_router(medicines.router)
 app.include_router(pharmacy_queue.router)
 app.include_router(alerts.router)
+app.include_router(admin_analytics.router)

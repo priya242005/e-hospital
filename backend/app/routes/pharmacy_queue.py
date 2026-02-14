@@ -1,76 +1,94 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.firebase import db
+from datetime import date, timedelta
 
 router = APIRouter(
-    prefix="/pharmacy_queue",
-    tags=["Pharmacy Queue"]
+    prefix="/pharmacy",
+    tags=["Pharmacy"]
 )
-@router.post("/pharmacy_queue")
-def add_to_pharmacy_queue(
-    patient_id: str,
-    prescription_id: str,
-    hospital_id: str
-):
-    token = int(time.time())  # simple token generation
 
-    db.collection("pharmacy_queue").document(str(token)).set({
-        "patient_id": patient_id,
-        "prescription_id": prescription_id,
-        "hospital_id": hospital_id,
-        "status": "waiting"
+# -------------------- ADD / UPDATE MEDICINE --------------------
+@router.post("/medicines")
+def add_medicine(
+    medicine_id: str,
+    name: str,
+    current_stock: int,
+    reorder_level: int
+):
+    db.collection("medicines").document(medicine_id).set({
+        "medicine_id": medicine_id,
+        "name": name,
+        "current_stock": current_stock,
+        "reorder_level": reorder_level
     })
+    return {"message": "Medicine added/updated successfully"}
+
+# -------------------- ISSUE MEDICINE --------------------
+@router.post("/issue")
+def issue_medicine(medicine_id: str, quantity: int):
+    med_ref = db.collection("medicines").document(medicine_id)
+    med_doc = med_ref.get()
+
+    if not med_doc.exists:
+        raise HTTPException(status_code=404, detail="Medicine not found")
+
+    med = med_doc.to_dict()
+    if quantity > med["current_stock"]:
+        raise HTTPException(status_code=400, detail="Insufficient stock")
+
+    med_ref.update({
+        "current_stock": med["current_stock"] - quantity
+    })
+
+    db.collection("medicine_issues").add({
+        "medicine_id": medicine_id,
+        "quantity": quantity,
+        "issue_date": date.today().isoformat()
+    })
+
+    return {"message": "Medicine issued successfully"}
+
+# -------------------- DEMAND PREDICTION & ALERT --------------------
+@router.get("/predict/{medicine_id}")
+def predict_demand(medicine_id: str):
+    med_doc = db.collection("medicines").document(medicine_id).get()
+    if not med_doc.exists:
+        raise HTTPException(status_code=404, detail="Medicine not found")
+
+    med = med_doc.to_dict()
+    today = date.today()
+    last_week = today - timedelta(days=7)
+
+    issues = list(
+        db.collection("medicine_issues")
+        .where("medicine_id", "==", medicine_id)
+        .stream()
+    )
+
+    total_issued = 0
+    for issue in issues:
+        issue_date = date.fromisoformat(issue.to_dict()["issue_date"])
+        if issue_date >= last_week:
+            total_issued += issue.to_dict()["quantity"]
+
+    avg_daily_demand = total_issued / 7 if total_issued > 0 else 0
+    reorder_days = 5
+    predicted_need = avg_daily_demand * reorder_days
+
+    alert_generated = False
+
+    if med["current_stock"] < predicted_need:
+        db.collection("alerts").add({
+            "type": "LOW_STOCK",
+            "medicine_id": medicine_id,
+            "message": f"{med['name']} likely to run out soon"
+        })
+        alert_generated = True
 
     return {
-        "message": "Added to pharmacy queue",
-        "pharmacy_token": token
+        "medicine": med["name"],
+        "current_stock": med["current_stock"],
+        "avg_daily_demand": round(avg_daily_demand, 2),
+        "predicted_need_next_5_days": round(predicted_need, 2),
+        "alert_generated": alert_generated
     }
-
-# -------------------- READ ALL PHARMACY QUEUE --------------------
-@router.get("/pharmacy_queue")
-def get_pharmacy_queue():
-    queue = []
-    for doc in db.collection("pharmacy_queue").stream():
-        data = doc.to_dict()
-        data["pharmacy_token"] = doc.id
-        queue.append(data)
-    return queue
-
-# -------------------- READ ONE TOKEN --------------------
-@router.get("/pharmacy_queue/{token}")
-def get_pharmacy_token(token: str):
-    doc = db.collection("pharmacy_queue").document(token).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Token not found")
-
-    data = doc.to_dict()
-    data["pharmacy_token"] = token
-    return data
-
-# -------------------- UPDATE PHARMACY STATUS --------------------
-@router.put("/pharmacy_queue/{token}")
-def update_pharmacy_status(
-    token: str,
-    status: str  # waiting / issued / partial
-):
-    if status not in ["waiting", "issued", "partial"]:
-        raise HTTPException(status_code=400, detail="Invalid status")
-
-    doc_ref = db.collection("pharmacy_queue").document(token)
-    if not doc_ref.get().exists:
-        raise HTTPException(status_code=404, detail="Token not found")
-
-    doc_ref.update({
-        "status": status
-    })
-
-    return {"message": "Pharmacy queue updated"}
-
-# -------------------- DELETE PHARMACY TOKEN --------------------
-@router.delete("/pharmacy_queue/{token}")
-def delete_pharmacy_token(token: str):
-    doc_ref = db.collection("pharmacy_queue").document(token)
-    if not doc_ref.get().exists:
-        raise HTTPException(status_code=404, detail="Token not found")
-
-    doc_ref.delete()
-    return {"message": "Pharmacy token deleted"}

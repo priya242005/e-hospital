@@ -1,11 +1,14 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.firebase import db
+from datetime import date
 
 router = APIRouter(
     prefix="/doctors",
     tags=["Doctors"]
 )
-@router.post("/doctors")
+
+# -------------------- CREATE DOCTOR --------------------
+@router.post("/")
 def create_doctor(
     doctor_id: str,
     name: str,
@@ -21,56 +24,82 @@ def create_doctor(
     })
     return {"message": "Doctor created successfully"}
 
-# -------------------- READ ALL DOCTORS --------------------
-@router.get("/doctors")
+# -------------------- GET ALL DOCTORS --------------------
+@router.get("/")
 def get_all_doctors():
-    doctors = []
-    for doc in db.collection("doctors").stream():
-        data = doc.to_dict()
-        data["doctor_id"] = doc.id
-        doctors.append(data)
-    return doctors
+    return [{**doc.to_dict(), "doctor_id": doc.id}
+            for doc in db.collection("doctors").stream()]
 
-# -------------------- READ ONE DOCTOR --------------------
-@router.get("/doctors/{doctor_id}")
+# -------------------- GET ONE DOCTOR --------------------
+@router.get("/{doctor_id}")
 def get_doctor(doctor_id: str):
     doc = db.collection("doctors").document(doctor_id).get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Doctor not found")
-
-    data = doc.to_dict()
-    data["doctor_id"] = doc.id
-    return data
+    return {**doc.to_dict(), "doctor_id": doc.id}
 
 # -------------------- UPDATE DOCTOR --------------------
-@router.put("/doctors/{doctor_id}")
+@router.put("/{doctor_id}")
 def update_doctor(
     doctor_id: str,
     name: str | None = None,
     department: str | None = None,
     availability: str | None = None
 ):
-    doc_ref = db.collection("doctors").document(doctor_id)
-    if not doc_ref.get().exists:
+    ref = db.collection("doctors").document(doctor_id)
+    if not ref.get().exists:
         raise HTTPException(status_code=404, detail="Doctor not found")
 
-    update_data = {}
-    if name is not None:
-        update_data["name"] = name
-    if department is not None:
-        update_data["department"] = department
-    if availability is not None:
-        update_data["availability"] = availability
+    data = {}
+    if name: data["name"] = name
+    if department: data["department"] = department
+    if availability: data["availability"] = availability
 
-    doc_ref.update(update_data)
+    ref.update(data)
     return {"message": "Doctor updated successfully"}
 
 # -------------------- DELETE DOCTOR --------------------
-@router.delete("/doctors/{doctor_id}")
+@router.delete("/{doctor_id}")
 def delete_doctor(doctor_id: str):
-    doc_ref = db.collection("doctors").document(doctor_id)
-    if not doc_ref.get().exists:
+    ref = db.collection("doctors").document(doctor_id)
+    if not ref.get().exists:
         raise HTTPException(status_code=404, detail="Doctor not found")
-
-    doc_ref.delete()
+    ref.delete()
     return {"message": "Doctor deleted successfully"}
+
+# -------------------- LOAD BALANCING LOGIC --------------------
+@router.get("/assign/doctor")
+def assign_doctor(hospital_id: str, department: str):
+    today = date.today().isoformat()
+
+    doctors = list(
+        db.collection("doctors")
+        .where("hospital_id", "==", hospital_id)
+        .where("department", "==", department)
+        .where("availability", "==", "available")
+        .stream()
+    )
+
+    if not doctors:
+        raise HTTPException(status_code=404, detail="No available doctors")
+
+    min_load = float("inf")
+    selected_doctor = None
+
+    for doc in doctors:
+        load = len(list(
+            db.collection("opd_queue")
+            .where("doctor_id", "==", doc.id)
+            .where("status", "==", "waiting")
+            .where("opd_date", "==", today)
+            .stream()
+        ))
+
+        if load < min_load:
+            min_load = load
+            selected_doctor = doc
+
+    return {
+        "doctor_id": selected_doctor.id,
+        "current_load": min_load
+    }
