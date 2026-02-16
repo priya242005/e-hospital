@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import (
     hospital,
@@ -16,6 +17,16 @@ from app.routes import (
 
 app = FastAPI(title="Smart e-Hospital Management System")
 
+# -------------------- CORS CONFIGURATION --------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # Frontend (localhost:3000) allowed
+    allow_credentials=True,
+    allow_methods=["*"],          # GET, POST, PUT, DELETE, OPTIONS
+    allow_headers=["*"],
+)
+
+# -------------------- ROUTERS --------------------
 app.include_router(hospital.router)
 app.include_router(users.router)
 app.include_router(doctors.router)

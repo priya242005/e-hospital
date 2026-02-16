@@ -7,7 +7,6 @@ router = APIRouter(
     tags=["Admin Analytics"]
 )
 
-# -------------------- OPD LOAD ANALYTICS --------------------
 @router.get("/opd-load")
 def opd_load():
     today = date.today().isoformat()
@@ -34,7 +33,6 @@ def opd_load():
     }
 
 
-# -------------------- DOCTOR WORKLOAD ANALYTICS --------------------
 @router.get("/doctor-workload")
 def doctor_workload():
     today = date.today().isoformat()
@@ -59,7 +57,7 @@ def doctor_workload():
     return result
 
 
-# -------------------- BED OCCUPANCY SUMMARY --------------------
+
 @router.get("/bed-status")
 def bed_status_summary():
     beds = db.collection("beds").stream()
@@ -73,7 +71,6 @@ def bed_status_summary():
     return summary
 
 
-# -------------------- PHARMACY ALERTS SUMMARY --------------------
 @router.get("/pharmacy-alerts")
 def pharmacy_alerts():
     alerts = db.collection("alerts") \
@@ -90,7 +87,6 @@ def pharmacy_alerts():
     }
 
 
-# -------------------- CITY LEVEL HOSPITAL STATUS --------------------
 @router.get("/city-status")
 def city_status(city: str):
     hospitals = db.collection("hospitals") \

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from app.firebase import db
 import time
+import uuid
 from datetime import date
 
 router = APIRouter(
@@ -8,7 +10,9 @@ router = APIRouter(
     tags=["OPD"]
 )
 
-AVG_CONSULT_TIME = 7
+# -------------------- CONFIG --------------------
+
+AVG_CONSULT_TIME = 7  # minutes per patient
 
 PRIORITY_ORDER = {
     "emergency": 0,
@@ -16,20 +20,26 @@ PRIORITY_ORDER = {
     "normal": 2
 }
 
+# -------------------- REQUEST MODEL --------------------
+
+class OPDRequest(BaseModel):
+    patient_id: str
+    appointment_id: str
+    hospital_id: str
+    department: str
+    priority: str = "normal"  # emergency | elder | normal
+
+# -------------------- ADD TO OPD QUEUE --------------------
+
 @router.post("/")
-def add_to_opd(
-    patient_id: str,
-    appointment_id: str,
-    hospital_id: str,
-    department: str,
-    priority: str = "normal"
-):
+def add_to_opd(data: OPDRequest):
     today = date.today().isoformat()
 
+    # 1️⃣ Get available doctors
     doctors = list(
         db.collection("doctors")
-        .where("hospital_id", "==", hospital_id)
-        .where("department", "==", department)
+        .where("hospital_id", "==", data.hospital_id)
+        .where("department", "==", data.department)
         .where("availability", "==", "available")
         .stream()
     )
@@ -37,6 +47,7 @@ def add_to_opd(
     if not doctors:
         raise HTTPException(status_code=404, detail="No doctors available")
 
+    # 2️⃣ Find least-loaded doctor
     min_load = float("inf")
     assigned_doctor = None
 
@@ -52,26 +63,31 @@ def add_to_opd(
             min_load = load
             assigned_doctor = doc.id
 
-    token = int(time.time())
+    # 3️⃣ Generate safe unique token
+    token = uuid.uuid4().hex[:8]
 
-    db.collection("opd_queue").document(str(token)).set({
-        "patient_id": patient_id,
-        "appointment_id": appointment_id,
+    # 4️⃣ Save to OPD queue
+    db.collection("opd_queue").document(token).set({
+        "patient_id": data.patient_id,
+        "appointment_id": data.appointment_id,
+        "hospital_id": data.hospital_id,
+        "department": data.department,
         "doctor_id": assigned_doctor,
-        "priority": priority,
+        "priority": data.priority,
         "status": "waiting",
-        "token_time": token,
+        "token_time": int(time.time()),
         "opd_date": today
     })
 
     return {
         "token": token,
         "doctor_id": assigned_doctor,
+        "patients_ahead": min_load,
         "expected_waiting_time_min": min_load * AVG_CONSULT_TIME
     }
 
+# -------------------- VIEW TODAY OPD QUEUE --------------------
 
-# -------------------- VIEW TODAY'S OPD QUEUE --------------------
 @router.get("/")
 def view_today_opd_queue():
     today = date.today().isoformat()
@@ -83,9 +99,10 @@ def view_today_opd_queue():
         .stream()
     )
 
+    # Sort by priority then FIFO
     docs.sort(
         key=lambda d: (
-            PRIORITY_ORDER.get(d.to_dict().get("priority", "normal")),
+            PRIORITY_ORDER.get(d.to_dict().get("priority", "normal"), 2),
             d.to_dict()["token_time"]
         )
     )
@@ -93,16 +110,18 @@ def view_today_opd_queue():
     result = []
     for index, doc in enumerate(docs):
         data = doc.to_dict()
-        data["token"] = doc.id
-        data["position"] = index + 1
-        data["patients_ahead"] = index
-        data["expected_waiting_time_min"] = index * AVG_CONSULT_TIME
+        data.update({
+            "token": doc.id,
+            "position": index + 1,
+            "patients_ahead": index,
+            "expected_waiting_time_min": index * AVG_CONSULT_TIME
+        })
         result.append(data)
 
     return result
 
+# -------------------- GET WAITING TIME BY TOKEN --------------------
 
-# -------------------- GET WAITING TIME FOR A SPECIFIC TOKEN --------------------
 @router.get("/waiting-time/{token}")
 def get_waiting_time(token: str):
     today = date.today().isoformat()
@@ -116,7 +135,7 @@ def get_waiting_time(token: str):
 
     docs.sort(
         key=lambda d: (
-            PRIORITY_ORDER.get(d.to_dict().get("priority", "normal")),
+            PRIORITY_ORDER.get(d.to_dict().get("priority", "normal"), 2),
             d.to_dict()["token_time"]
         )
     )
@@ -129,13 +148,14 @@ def get_waiting_time(token: str):
                 "expected_waiting_time_min": index * AVG_CONSULT_TIME
             }
 
-    raise HTTPException(status_code=404, detail="Token not found or already completed")
-
+    raise HTTPException(status_code=404, detail="Token not found or consultation completed")
 
 # -------------------- COMPLETE CONSULTATION --------------------
+
 @router.put("/{token}")
 def complete_opd(token: str):
     doc_ref = db.collection("opd_queue").document(token)
+
     if not doc_ref.get().exists:
         raise HTTPException(status_code=404, detail="Token not found")
 
