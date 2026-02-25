@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.firebase import db
+import uuid
 
 router = APIRouter(
     prefix="/alerts",
@@ -12,12 +13,15 @@ def create_alert(
     alert_type: str,
     message: str
 ):
+    alert_id = str(uuid.uuid4())
+    
     db.collection("alerts").add({
+        "alert_id": alert_id,
         "hospital_id": hospital_id,
         "type": alert_type,
         "message": message
     })
-    return {"message": "Alert created successfully"}
+    return {"message": "Alert created successfully", "alert_id": alert_id}
 
 
 @router.get("/")

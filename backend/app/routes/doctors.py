@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.firebase import db
 from datetime import date
+import uuid
 
 router = APIRouter(
     prefix="/doctors",
@@ -10,19 +11,21 @@ router = APIRouter(
 # -------------------- CREATE DOCTOR --------------------
 @router.post("/")
 def create_doctor(
-    doctor_id: str,
     name: str,
     department: str,
     hospital_id: str,
     availability: str = "available"
 ):
+    doctor_id = str(uuid.uuid4())
+    
     db.collection("doctors").document(doctor_id).set({
+        "doctor_id": doctor_id,
         "name": name,
         "department": department,
         "hospital_id": hospital_id,
         "availability": availability
     })
-    return {"message": "Doctor created successfully"}
+    return {"message": "Doctor created successfully", "doctor_id": doctor_id}
 
 # -------------------- GET ALL DOCTORS --------------------
 @router.get("/")
@@ -66,6 +69,23 @@ def delete_doctor(doctor_id: str):
         raise HTTPException(status_code=404, detail="Doctor not found")
     ref.delete()
     return {"message": "Doctor deleted successfully"}
+
+# -------------------- GET DOCTORS BY HOSPITAL AND DEPARTMENT --------------------
+@router.get("/by-hospital-department")
+def get_doctors_by_hospital_department(hospital_id: str, department: str):
+    doctors = db.collection("doctors")\
+        .where("hospital_id", "==", hospital_id)\
+        .where("department", "==", department)\
+        .where("availability", "==", "available")\
+        .stream()
+    
+    result = []
+    for doc in doctors:
+        data = doc.to_dict()
+        data["doctor_id"] = doc.id
+        result.append(data)
+    
+    return result
 
 # -------------------- LOAD BALANCING LOGIC --------------------
 @router.get("/assign/doctor")

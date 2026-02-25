@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.firebase import db
+import uuid
 
 router = APIRouter(
     prefix="/hospitals",
@@ -8,17 +9,19 @@ router = APIRouter(
 
 @router.post("/")
 def create_hospital(
-    hospital_id: str,
     name: str,
     city: str,
     status: str = "active"
 ):
+    hospital_id = str(uuid.uuid4())
+    
     db.collection("hospitals").document(hospital_id).set({
+        "hospital_id": hospital_id,
         "name": name,
         "city": city,
         "status": status
     })
-    return {"message": "Hospital created successfully"}
+    return {"message": "Hospital created successfully", "hospital_id": hospital_id}
 
 
 @router.get("/")
@@ -26,7 +29,6 @@ def get_all_hospitals():
     hospitals = []
     for doc in db.collection("hospitals").stream():
         data = doc.to_dict()
-        data["hospital_id"] = doc.id
         hospitals.append(data)
     return hospitals
 

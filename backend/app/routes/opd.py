@@ -23,53 +23,57 @@ PRIORITY_ORDER = {
 # -------------------- REQUEST MODEL --------------------
 
 class OPDRequest(BaseModel):
+    user_id: str
     patient_id: str
-    appointment_id: str
     hospital_id: str
     department: str
-    priority: str = "normal"  # emergency | elder | normal
+    doctor_id: str = None
+    priority: str = "normal"
+    auto_assign: bool = False
 
 # -------------------- ADD TO OPD QUEUE --------------------
 
 @router.post("/")
 def add_to_opd(data: OPDRequest):
+    print("OPD REQUEST RECEIVED:", data.dict())
     today = date.today().isoformat()
 
-    # 1️⃣ Get available doctors
-    doctors = list(
-        db.collection("doctors")
-        .where("hospital_id", "==", data.hospital_id)
-        .where("department", "==", data.department)
-        .where("availability", "==", "available")
-        .stream()
-    )
-
-    if not doctors:
-        raise HTTPException(status_code=404, detail="No doctors available")
-
-    # 2️⃣ Find least-loaded doctor
-    min_load = float("inf")
-    assigned_doctor = None
-
-    for doc in doctors:
-        load = len(list(
-            db.collection("opd_queue")
-            .where("doctor_id", "==", doc.id)
-            .where("status", "==", "waiting")
-            .where("opd_date", "==", today)
+    assigned_doctor = data.doctor_id
+    
+    # Auto-assign doctor if requested or no doctor specified
+    if data.auto_assign or not assigned_doctor:
+        doctors = list(
+            db.collection("doctors")
+            .where("hospital_id", "==", data.hospital_id)
+            .where("department", "==", data.department)
+            .where("availability", "==", "available")
             .stream()
-        ))
-        if load < min_load:
-            min_load = load
-            assigned_doctor = doc.id
+        )
 
-    # 3️⃣ Generate safe unique token
+        if not doctors:
+            raise HTTPException(status_code=404, detail="No doctors available")
+
+        # Find doctor with minimum load
+        min_load = float("inf")
+        for doc in doctors:
+            load = len(list(
+                db.collection("opd_queue")
+                .where("doctor_id", "==", doc.id)
+                .where("status", "==", "waiting")
+                .where("opd_date", "==", today)
+                .stream()
+            ))
+            if load < min_load:
+                min_load = load
+                assigned_doctor = doc.id
+
+    # Generate token
     token = uuid.uuid4().hex[:8]
 
-    # 4️⃣ Save to OPD queue
+    # Save to OPD queue
     db.collection("opd_queue").document(token).set({
+        "user_id": data.user_id,
         "patient_id": data.patient_id,
-        "appointment_id": data.appointment_id,
         "hospital_id": data.hospital_id,
         "department": data.department,
         "doctor_id": assigned_doctor,
@@ -79,11 +83,19 @@ def add_to_opd(data: OPDRequest):
         "opd_date": today
     })
 
+    patients_ahead = len(list(
+        db.collection("opd_queue")
+        .where("doctor_id", "==", assigned_doctor)
+        .where("status", "==", "waiting")
+        .where("opd_date", "==", today)
+        .stream()
+    )) - 1
+
     return {
         "token": token,
         "doctor_id": assigned_doctor,
-        "patients_ahead": min_load,
-        "expected_waiting_time_min": min_load * AVG_CONSULT_TIME
+        "patients_ahead": max(0, patients_ahead),
+        "expected_waiting_time_min": max(0, patients_ahead) * AVG_CONSULT_TIME
     }
 
 # -------------------- VIEW TODAY OPD QUEUE --------------------

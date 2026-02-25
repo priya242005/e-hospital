@@ -1,24 +1,60 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Navbar from "./components/Navbar";
-import Home from "./pages/Home";
-import OPDBooking from "./pages/OPDBooking";
-import WaitingTime from "./pages/WaitingTime";
-import BedAvailability from "./pages/BedAvailability";
-import PharmacyInfo from "./pages/PharmacyInfo";
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+
+import AdminSidebar from "./admin/components/AdminSidebar";
+import AnalyticsDashboard from "./admin/pages/AnalyticsDashboard";
+import AdminDashboard from "./admin/pages/AdminDashboard";
+import EmergencyMap from "./admin/pages/EmergencyMap";
+
+import Login from "./patient/pages/Login";
+import Register from "./patient/pages/Register";
+import Home from "./patient/pages/Home";
+import OPDBooking from "./patient/pages/OPDBooking";
+import TokenConfirmation from "./patient/pages/TokenConfirmation";
+import WaitingTime from "./patient/pages/WaitingTime";
+import BedAvailability from "./patient/pages/BedAvailability";
+import PharmacyInfo from "./patient/pages/PharmacyInfo";
+import AddPatient from "./patient/pages/AddPatient";
+import ProtectedRoute from "./patient/components/ProtectedRoute";
+
+function Layout() {
+  const location = useLocation();
+  const isAdminPage = location.pathname.startsWith("/admin");
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      
+      {isAdminPage && <AdminSidebar />}
+
+      <div className={isAdminPage ? "ml-64 p-8" : ""}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          
+          <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path="/add-patient" element={<ProtectedRoute><AddPatient /></ProtectedRoute>} />
+          <Route path="/opd-booking" element={<ProtectedRoute><OPDBooking /></ProtectedRoute>} />
+          <Route path="/token-confirmation" element={<ProtectedRoute><TokenConfirmation /></ProtectedRoute>} />
+          <Route path="/waiting-time" element={<ProtectedRoute><WaitingTime /></ProtectedRoute>} />
+          <Route path="/bed-availability" element={<ProtectedRoute><BedAvailability /></ProtectedRoute>} />
+          <Route path="/pharmacy-info" element={<ProtectedRoute><PharmacyInfo /></ProtectedRoute>} />
+          
+          <Route path="/admin" element={<AnalyticsDashboard />} />
+          <Route path="/admin/hospitals" element={<AdminDashboard />} />
+          <Route path="/admin/doctors" element={<AdminDashboard />} />
+          <Route path="/admin/beds" element={<AdminDashboard />} />
+          <Route path="/admin/opd" element={<AdminDashboard />} />
+          <Route path="/admin/pharmacy" element={<AdminDashboard />} />
+          <Route path="/admin/emergency" element={<EmergencyMap />} />
+        </Routes>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gray-100">
-        <Navbar />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/opd" element={<OPDBooking />} />
-          <Route path="/waiting" element={<WaitingTime />} />
-          <Route path="/beds" element={<BedAvailability />} />
-          <Route path="/pharmacy" element={<PharmacyInfo />} />
-        </Routes>
-      </div>
+      <Layout />
     </Router>
   );
 }
