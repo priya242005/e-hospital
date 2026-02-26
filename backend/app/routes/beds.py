@@ -50,10 +50,15 @@ def update_beds(
 # -------------------- GET ALL BED STATUS (CITY / ADMIN VIEW) --------------------
 @router.get("/")
 def get_all_beds():
-    return [
-        {**doc.to_dict(), "hospital_id": doc.id}
-        for doc in db.collection("beds").stream()
-    ]
+    beds = []
+    for doc in db.collection("beds").stream():
+        bed_data = doc.to_dict()
+        # Get hospital name
+        hospital_doc = db.collection("hospitals").document(bed_data["hospital_id"]).get()
+        if hospital_doc.exists:
+            bed_data["hospital_name"] = hospital_doc.to_dict().get("hospital_name", "Unknown")
+        beds.append(bed_data)
+    return beds
 
 
 # -------------------- GET SINGLE HOSPITAL BED STATUS --------------------

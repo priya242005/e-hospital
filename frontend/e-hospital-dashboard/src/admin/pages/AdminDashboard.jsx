@@ -26,17 +26,19 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       setError(null);
-      const hospitalRes = await AdminAPI.get("/hospitals");
-      const doctorRes = await AdminAPI.get("/doctors");
-      const bedRes = await AdminAPI.get("/beds");
-      const opdRes = await AdminAPI.get("/opd");
-      const alertRes = await AdminAPI.get("/alerts");
+      const [hospitalRes, doctorRes, bedRes, opdRes, alertRes] = await Promise.all([
+        AdminAPI.get("/hospitals"),
+        AdminAPI.get("/doctors"),
+        AdminAPI.get("/beds"),
+        AdminAPI.get("/opd"),
+        AdminAPI.get("/alerts")
+      ]);
 
-      setHospitals(hospitalRes.data);
-      setDoctors(doctorRes.data);
-      setBeds(bedRes.data);
-      setOpdData(opdRes.data);
-      setAlerts(alertRes.data);
+      setHospitals(hospitalRes.data || []);
+      setDoctors(doctorRes.data || []);
+      setBeds(bedRes.data || []);
+      setOpdData(opdRes.data || []);
+      setAlerts(alertRes.data || []);
     } catch (error) {
       console.error("Admin Dashboard Error:", error);
       setError("Failed to load dashboard data");
@@ -50,17 +52,17 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="bg-gradient-to-r from-blue-700 to-blue-900 text-white shadow-lg">
+      <div className="bg-blue-900 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-6 py-5">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold flex items-center gap-3">
                 🏥 Hospital Management
               </h1>
-              <p className="text-blue-100 text-sm mt-1">Complete Hospital Overview</p>
+              <p className="text-blue-200 text-sm mt-1">Complete Hospital Overview</p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-blue-100">Last Updated</p>
+              <p className="text-sm text-blue-200">Last Updated</p>
               <p className="text-lg font-semibold">{new Date().toLocaleTimeString()}</p>
             </div>
           </div>

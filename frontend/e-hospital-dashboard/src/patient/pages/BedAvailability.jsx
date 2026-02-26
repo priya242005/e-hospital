@@ -68,10 +68,16 @@ const BedAvailability = () => {
                 const { status, color } = getOccupancyStatus(occupancy);
 
                 return (
-                  <div key={bed.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition">
+                  <div key={bed.hospital_id} className="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition">
                     <div className="flex justify-between items-start mb-4">
-                      <h3 className="font-semibold text-lg text-gray-800">{bed.hospital_name}</h3>
-                      <StatusBadge status={status} />
+                      <h3 className="font-semibold text-lg text-gray-800">{bed.hospital_name || 'Unknown Hospital'}</h3>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        bed.status === 'green' ? 'bg-green-100 text-green-800' :
+                        bed.status === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {bed.status === 'green' ? 'Available' : bed.status === 'yellow' ? 'Limited' : 'Full'}
+                      </span>
                     </div>
 
                     <div className="space-y-3">
@@ -87,18 +93,21 @@ const BedAvailability = () => {
 
                       <div className="flex justify-between">
                         <span className="text-gray-600">Occupancy</span>
-                        <span className="font-semibold">{occupancy}%</span>
+                        <span className="font-semibold">{bed.occupancy_percent}%</span>
                       </div>
 
                       <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                         <div
-                          className={`${color} h-2 rounded-full transition-all`}
-                          style={{ width: `${occupancy}%` }}
+                          className={`h-2 rounded-full transition-all ${
+                            bed.status === 'green' ? 'bg-green-500' :
+                            bed.status === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${bed.occupancy_percent}%` }}
                         ></div>
                       </div>
                     </div>
 
-                    {occupancy >= 90 && (
+                    {bed.status === 'red' && (
                       <div className="mt-4 bg-red-50 text-red-700 p-3 rounded-lg text-sm">
                         ⚠ Beds Full – Try another hospital
                       </div>

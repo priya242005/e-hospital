@@ -4,7 +4,7 @@ import StatusBadge from '../components/StatusBadge';
 const TokenConfirmation = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { tokenData, doctorId, priority } = location.state || {};
+  const { tokenData, priority } = location.state || {};
 
   if (!tokenData) {
     return (
@@ -37,15 +37,20 @@ const TokenConfirmation = () => {
             <div className="text-center">
               <p className="text-gray-600 mb-2">Token Number</p>
               <p className="text-5xl font-bold text-blue-600">
-                {tokenData.token_number || tokenData.id}
+                {tokenData.token_id}
               </p>
             </div>
           </div>
 
           <div className="space-y-4 mb-8">
             <div className="flex justify-between items-center border-b pb-3">
-              <span className="text-gray-600">Doctor Assigned</span>
-              <span className="font-semibold">{doctorId}</span>
+              <span className="text-gray-600">Appointment ID</span>
+              <span className="font-semibold text-sm">{tokenData.appointment_id}</span>
+            </div>
+
+            <div className="flex justify-between items-center border-b pb-3">
+              <span className="text-gray-600">Doctor ID</span>
+              <span className="font-semibold text-sm">{tokenData.doctor_id}</span>
             </div>
 
             <div className="flex justify-between items-center border-b pb-3">
@@ -53,30 +58,16 @@ const TokenConfirmation = () => {
               <StatusBadge status={priority} />
             </div>
 
-            <div className="flex justify-between items-center border-b pb-3">
-              <span className="text-gray-600">Estimated Waiting Time</span>
-              <span className="font-semibold">
-                {tokenData.estimated_wait_time || 'Calculating...'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center border-b pb-3">
-              <span className="text-gray-600">Queue Position</span>
-              <span className="font-semibold">
-                {tokenData.queue_position || 'N/A'}
-              </span>
-            </div>
-
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Status</span>
-              <StatusBadge status={tokenData.status || 'waiting'} />
+              <StatusBadge status="waiting" />
             </div>
           </div>
 
           <div className="space-y-3">
             <button
               onClick={() => navigate('/waiting-time', { 
-                state: { tokenNumber: tokenData.token_number || tokenData.id } 
+                state: { tokenId: tokenData.token_id } 
               })}
               className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium"
             >

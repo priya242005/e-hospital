@@ -7,6 +7,7 @@ export default function AdminSidebar() {
   const menuItems = [
     { path: '/admin', icon: '📊', label: 'Dashboard' },
     { path: '/admin/hospitals', icon: '🏥', label: 'Hospitals' },
+    { path: '/admin/departments', icon: '🏢', label: 'Departments' },
     { path: '/admin/doctors', icon: '👨‍⚕️', label: 'Doctors' },
     { path: '/admin/beds', icon: '🛏️', label: 'Beds' },
     { path: '/admin/opd', icon: '📋', label: 'OPD Queue' },
@@ -16,7 +17,7 @@ export default function AdminSidebar() {
 
   return (
     <div className="w-64 bg-white h-screen shadow-lg fixed left-0 top-0">
-      <div className="bg-gradient-to-r from-blue-700 to-blue-900 text-white p-4">
+      <div className="bg-blue-900 text-white p-4">
         <h2 className="text-xl font-bold">Admin Panel</h2>
       </div>
       
@@ -27,7 +28,7 @@ export default function AdminSidebar() {
             onClick={() => navigate(item.path)}
             className={`w-full text-left px-6 py-3 flex items-center gap-3 transition-colors ${
               location.pathname === item.path
-                ? 'bg-blue-50 text-blue-700 border-r-4 border-blue-700'
+                ? 'bg-blue-50 text-blue-900 border-r-4 border-blue-900'
                 : 'text-gray-700 hover:bg-gray-50'
             }`}
           >

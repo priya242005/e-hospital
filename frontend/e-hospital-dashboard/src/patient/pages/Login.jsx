@@ -20,7 +20,7 @@ const Login = () => {
         password
       });
       
-      localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
       navigate('/');
     } catch (err) {
@@ -31,40 +31,43 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-blue-600">Smart e-Hospital</h1>
-          <p className="text-gray-600 mt-2">Patient Login</p>
+          <div className="w-16 h-16 bg-[#0b1f3a] rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl text-white">🏥</span>
+          </div>
+          <h1 className="text-3xl font-bold text-[#0b1f3a]">Smart e-Hospital</h1>
+          <p className="text-gray-600 mt-2">Patient Login Portal</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm">
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="patient@gmail.com"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b1f3a] focus:border-transparent transition"
+              placeholder="patient@example.com"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter password"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0b1f3a] focus:border-transparent transition"
+              placeholder="Enter your password"
               required
             />
           </div>
@@ -72,7 +75,7 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-medium disabled:bg-gray-400"
+            className="w-full bg-[#0b1f3a] text-white py-3 rounded-lg hover:bg-[#0d2847] transition font-semibold shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {loading ? 'Logging in...' : 'Login'}
           </button>
@@ -80,8 +83,8 @@ const Login = () => {
 
         <p className="text-center text-gray-600 mt-6">
           Don't have an account?{' '}
-          <Link to="/register" className="text-blue-600 hover:underline font-medium">
-            Register
+          <Link to="/register" className="text-[#0b1f3a] hover:underline font-semibold">
+            Register Now
           </Link>
         </p>
       </div>

@@ -22,12 +22,14 @@ PRIORITY_ORDER = {
 
 # -------------------- REQUEST MODEL --------------------
 
+from typing import Optional
+
 class OPDRequest(BaseModel):
     user_id: str
     patient_id: str
     hospital_id: str
     department: str
-    doctor_id: str = None
+    doctor_id: Optional[str] = None
     priority: str = "normal"
     auto_assign: bool = False
 
@@ -38,35 +40,6 @@ def add_to_opd(data: OPDRequest):
     print("OPD REQUEST RECEIVED:", data.dict())
     today = date.today().isoformat()
 
-    assigned_doctor = data.doctor_id
-    
-    # Auto-assign doctor if requested or no doctor specified
-    if data.auto_assign or not assigned_doctor:
-        doctors = list(
-            db.collection("doctors")
-            .where("hospital_id", "==", data.hospital_id)
-            .where("department", "==", data.department)
-            .where("availability", "==", "available")
-            .stream()
-        )
-
-        if not doctors:
-            raise HTTPException(status_code=404, detail="No doctors available")
-
-        # Find doctor with minimum load
-        min_load = float("inf")
-        for doc in doctors:
-            load = len(list(
-                db.collection("opd_queue")
-                .where("doctor_id", "==", doc.id)
-                .where("status", "==", "waiting")
-                .where("opd_date", "==", today)
-                .stream()
-            ))
-            if load < min_load:
-                min_load = load
-                assigned_doctor = doc.id
-
     # Generate token
     token = uuid.uuid4().hex[:8]
 
@@ -76,66 +49,47 @@ def add_to_opd(data: OPDRequest):
         "patient_id": data.patient_id,
         "hospital_id": data.hospital_id,
         "department": data.department,
-        "doctor_id": assigned_doctor,
+        "doctor_id": data.doctor_id,
         "priority": data.priority,
         "status": "waiting",
         "token_time": int(time.time()),
         "opd_date": today
     })
 
-    patients_ahead = len(list(
-        db.collection("opd_queue")
-        .where("doctor_id", "==", assigned_doctor)
-        .where("status", "==", "waiting")
-        .where("opd_date", "==", today)
-        .stream()
-    )) - 1
+    # Calculate patients ahead (dummy calculation for now)
+    patients_ahead = 0
 
     return {
         "token": token,
-        "doctor_id": assigned_doctor,
-        "patients_ahead": max(0, patients_ahead),
-        "expected_waiting_time_min": max(0, patients_ahead) * AVG_CONSULT_TIME
+        "doctor_id": data.doctor_id,
+        "patients_ahead": patients_ahead,
+        "expected_waiting_time_min": patients_ahead * AVG_CONSULT_TIME
     }
 
 # -------------------- VIEW TODAY OPD QUEUE --------------------
 
 @router.get("/")
-def view_today_opd_queue():
+def view_today_opd_queue(user_id: str = None):
     today = date.today().isoformat()
 
-    docs = list(
-        db.collection("opd_queue")
-        .where("status", "==", "waiting")
-        .where("opd_date", "==", today)
-        .stream()
-    )
-
-    # Sort by priority then FIFO
-    docs.sort(
-        key=lambda d: (
-            PRIORITY_ORDER.get(d.to_dict().get("priority", "normal"), 2),
-            d.to_dict()["token_time"]
-        )
-    )
+    query = db.collection("opd_queue")
+    if user_id:
+        query = query.where("user_id", "==", user_id)
+    
+    docs = list(query.where("opd_date", "==", today).stream())
 
     result = []
-    for index, doc in enumerate(docs):
+    for doc in docs:
         data = doc.to_dict()
-        data.update({
-            "token": doc.id,
-            "position": index + 1,
-            "patients_ahead": index,
-            "expected_waiting_time_min": index * AVG_CONSULT_TIME
-        })
+        data["token"] = doc.id
         result.append(data)
 
     return result
 
 # -------------------- GET WAITING TIME BY TOKEN --------------------
 
-@router.get("/waiting-time/{token}")
-def get_waiting_time(token: str):
+@router.get("/waiting-time/{token_id}")
+def get_waiting_time(token_id: str):
     today = date.today().isoformat()
 
     docs = list(
@@ -153,9 +107,12 @@ def get_waiting_time(token: str):
     )
 
     for index, doc in enumerate(docs):
-        if doc.id == token:
+        if doc.id == token_id:
+            data = doc.to_dict()
             return {
-                "token": token,
+                "token_id": token_id,
+                "doctor_id": data.get("doctor_id"),
+                "priority": data.get("priority"),
                 "patients_ahead": index,
                 "expected_waiting_time_min": index * AVG_CONSULT_TIME
             }
@@ -164,15 +121,12 @@ def get_waiting_time(token: str):
 
 # -------------------- COMPLETE CONSULTATION --------------------
 
-@router.put("/{token}")
-def complete_opd(token: str):
-    doc_ref = db.collection("opd_queue").document(token)
+@router.put("/{token_id}")
+def complete_opd(token_id: str):
+    doc_ref = db.collection("opd_queue").document(token_id)
 
     if not doc_ref.get().exists:
         raise HTTPException(status_code=404, detail="Token not found")
 
-    doc_ref.update({
-        "status": "completed"
-    })
-
+    doc_ref.update({"status": "completed"})
     return {"message": "Consultation completed"}

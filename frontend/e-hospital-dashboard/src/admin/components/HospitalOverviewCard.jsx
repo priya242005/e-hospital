@@ -39,7 +39,7 @@ export default function HospitalOverviewCard({
           >
             <h3 className="text-lg font-bold text-blue-900 mb-3 flex items-center gap-2">
               <span className="text-xl">🏥</span>
-              {hospital.name}
+              {hospital.hospital_name || hospital.name}
             </h3>
             <p className="text-sm text-gray-600 mb-4">📍 {hospital.city}</p>
             

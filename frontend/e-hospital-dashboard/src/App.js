@@ -4,6 +4,11 @@ import AdminSidebar from "./admin/components/AdminSidebar";
 import AnalyticsDashboard from "./admin/pages/AnalyticsDashboard";
 import AdminDashboard from "./admin/pages/AdminDashboard";
 import EmergencyMap from "./admin/pages/EmergencyMap";
+import HospitalsManagement from "./admin/pages/HospitalsManagement";
+import DepartmentsManagement from "./admin/pages/DepartmentsManagement";
+import DoctorsManagement from "./admin/pages/DoctorsManagement";
+import BedsManagement from "./admin/pages/BedsManagement";
+import OPDManagement from "./admin/pages/OPDManagement";
 
 import Login from "./patient/pages/Login";
 import Register from "./patient/pages/Register";
@@ -14,6 +19,8 @@ import WaitingTime from "./patient/pages/WaitingTime";
 import BedAvailability from "./patient/pages/BedAvailability";
 import PharmacyInfo from "./patient/pages/PharmacyInfo";
 import AddPatient from "./patient/pages/AddPatient";
+import MyAppointments from "./patient/pages/MyAppointments";
+import AppointmentDetails from "./patient/pages/AppointmentDetails";
 import ProtectedRoute from "./patient/components/ProtectedRoute";
 
 function Layout() {
@@ -37,12 +44,15 @@ function Layout() {
           <Route path="/waiting-time" element={<ProtectedRoute><WaitingTime /></ProtectedRoute>} />
           <Route path="/bed-availability" element={<ProtectedRoute><BedAvailability /></ProtectedRoute>} />
           <Route path="/pharmacy-info" element={<ProtectedRoute><PharmacyInfo /></ProtectedRoute>} />
+          <Route path="/my-appointments" element={<ProtectedRoute><MyAppointments /></ProtectedRoute>} />
+          <Route path="/appointment-details" element={<ProtectedRoute><AppointmentDetails /></ProtectedRoute>} />
           
           <Route path="/admin" element={<AnalyticsDashboard />} />
-          <Route path="/admin/hospitals" element={<AdminDashboard />} />
-          <Route path="/admin/doctors" element={<AdminDashboard />} />
-          <Route path="/admin/beds" element={<AdminDashboard />} />
-          <Route path="/admin/opd" element={<AdminDashboard />} />
+          <Route path="/admin/hospitals" element={<HospitalsManagement />} />
+          <Route path="/admin/departments" element={<DepartmentsManagement />} />
+          <Route path="/admin/doctors" element={<DoctorsManagement />} />
+          <Route path="/admin/beds" element={<BedsManagement />} />
+          <Route path="/admin/opd" element={<OPDManagement />} />
           <Route path="/admin/pharmacy" element={<AdminDashboard />} />
           <Route path="/admin/emergency" element={<EmergencyMap />} />
         </Routes>

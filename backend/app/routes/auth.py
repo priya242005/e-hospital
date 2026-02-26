@@ -1,73 +1,78 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, EmailStr
-from datetime import datetime
-import bcrypt
-import uuid
+from pydantic import BaseModel
 from app.firebase import db
+from datetime import datetime, timedelta
+import jwt
+import bcrypt
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-class RegisterRequest(BaseModel):
+SECRET_KEY = "your-secret-key-change-in-production"
+ALGORITHM = "HS256"
+
+class UserRegister(BaseModel):
     name: str
-    email: EmailStr
+    email: str
     password: str
 
-class LoginRequest(BaseModel):
-    email: EmailStr
+class UserLogin(BaseModel):
+    email: str
     password: str
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(hours=24)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 @router.post("/register")
-async def register(request: RegisterRequest):
-    # Check if email already exists
+def register(user: UserRegister):
     users_ref = db.collection("users")
-    existing_user = users_ref.where("email", "==", request.email).limit(1).get()
+    existing = users_ref.where("email", "==", user.email).limit(1).stream()
     
-    if existing_user:
+    if list(existing):
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Hash password with lower cost factor for faster processing
-    password_hash = bcrypt.hashpw(request.password.encode('utf-8'), bcrypt.gensalt(rounds=4)).decode('utf-8')
+    hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt())
     
-    # Generate unique user ID
-    user_id = str(uuid.uuid4())
-    
-    # Create user document
     user_data = {
-        "user_id": user_id,
-        "name": request.name,
-        "email": request.email,
-        "password_hash": password_hash,
-        "role": "patient",
-        "hospital_id": None,
-        "created_at": datetime.utcnow()
+        "name": user.name,
+        "email": user.email,
+        "password": hashed_password.decode('utf-8'),
+        "created_at": datetime.utcnow().isoformat()
     }
     
-    db.collection("users").document(user_id).set(user_data)
+    doc_ref = users_ref.add(user_data)
+    user_id = doc_ref[1].id
     
-    return {"message": "User registered successfully"}
+    return {"message": "User registered successfully", "user_id": user_id}
 
 @router.post("/login")
-async def login(request: LoginRequest):
-    # Fetch user by email
+def login(user: UserLogin):
     users_ref = db.collection("users")
-    user_docs = users_ref.where("email", "==", request.email).limit(1).get()
+    user_docs = users_ref.where("email", "==", user.email).limit(1).stream()
     
-    if not user_docs:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    user_doc = None
+    for doc in user_docs:
+        user_doc = doc
+        break
     
-    user_doc = user_docs[0]
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
     user_data = user_doc.to_dict()
     
-    # Verify password
-    if not bcrypt.checkpw(request.password.encode('utf-8'), user_data["password_hash"].encode('utf-8')):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not bcrypt.checkpw(user.password.encode('utf-8'), user_data["password"].encode('utf-8')):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    access_token = create_access_token({"sub": user.email, "user_id": user_doc.id})
     
     return {
-        "message": "Login successful",
+        "access_token": access_token,
+        "token_type": "bearer",
         "user": {
-            "user_id": user_data["user_id"],
+            "user_id": user_doc.id,
             "name": user_data["name"],
-            "email": user_data["email"],
-            "role": user_data["role"]
+            "email": user_data["email"]
         }
     }
