@@ -3,43 +3,32 @@ import { useNavigate } from 'react-router-dom';
 import patientApi from '../services/patientApi';
 import StatusBadge from '../components/StatusBadge';
 
-const MyAppointments = () => {
-  const [currentAppointments, setCurrentAppointments] = useState([]);
+const AppointmentHistory = () => {
   const [historyAppointments, setHistoryAppointments] = useState([]);
-  const [activeTab, setActiveTab] = useState('current');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchAppointments();
+    fetchHistory();
   }, []);
 
-  const fetchAppointments = async () => {
+  const fetchHistory = async () => {
     try {
       const user = JSON.parse(localStorage.getItem('user'));
       const response = await patientApi.getUserAppointments(user.user_id);
       
       const today = new Date().toISOString().split('T')[0];
       
-      const current = response.data.filter(apt => 
-        apt.appointment_date === today && apt.token_status === 'waiting'
-      );
-      
       const history = response.data.filter(apt => 
         apt.appointment_date !== today || apt.token_status === 'completed'
       ).sort((a, b) => new Date(b.appointment_date) - new Date(a.appointment_date));
       
-      setCurrentAppointments(current);
       setHistoryAppointments(history);
     } catch (error) {
-      console.error('Failed to load appointments');
+      console.error('Failed to load history');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleViewDetails = (appointment) => {
-    navigate('/appointment-details', { state: { appointment } });
   };
 
   if (loading) {
@@ -50,8 +39,6 @@ const MyAppointments = () => {
     );
   }
 
-  const appointments = activeTab === 'current' ? currentAppointments : historyAppointments;
-
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
@@ -61,56 +48,21 @@ const MyAppointments = () => {
 
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="bg-gradient-to-r from-blue-900 to-blue-700 p-6">
-            <h2 className="text-2xl md:text-3xl font-bold text-white">My Appointments</h2>
-          </div>
-
-          <div className="flex border-b">
-            <button
-              onClick={() => setActiveTab('current')}
-              className={`flex-1 py-4 px-6 font-semibold transition ${
-                activeTab === 'current'
-                  ? 'bg-blue-50 text-blue-900 border-b-4 border-blue-900'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              Current ({currentAppointments.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`flex-1 py-4 px-6 font-semibold transition ${
-                activeTab === 'history'
-                  ? 'bg-blue-50 text-blue-900 border-b-4 border-blue-900'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              History ({historyAppointments.length})
-            </button>
+            <h2 className="text-2xl md:text-3xl font-bold text-white">Appointment History</h2>
+            <p className="text-blue-100 mt-2">View your past appointments</p>
           </div>
 
           <div className="p-6">
-            {appointments.length === 0 ? (
+            {historyAppointments.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-gray-600 mb-4">
-                  {activeTab === 'current' ? 'No current appointments' : 'No appointment history'}
-                </p>
-                {activeTab === 'current' && (
-                  <button
-                    onClick={() => navigate('/opd-booking')}
-                    className="bg-blue-900 text-white px-6 py-2 rounded-lg hover:bg-blue-800"
-                  >
-                    Book New Appointment
-                  </button>
-                )}
+                <p className="text-gray-600">No appointment history</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {appointments.map((appointment) => (
+                {historyAppointments.map((appointment) => (
                   <div
                     key={appointment.token_id || appointment.appointment_id}
-                    className={`border rounded-lg p-4 md:p-6 hover:shadow-lg transition cursor-pointer ${
-                      appointment.token_status === 'waiting' ? 'border-blue-300 bg-blue-50' : 'border-gray-200'
-                    }`}
-                    onClick={() => handleViewDetails(appointment)}
+                    className="border border-gray-200 rounded-lg p-4 md:p-6 hover:shadow-lg transition"
                   >
                     <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                       <div className="flex-1">
@@ -145,15 +97,6 @@ const MyAppointments = () => {
                           </div>
                         </div>
                       </div>
-
-                      {appointment.token_status === 'waiting' && (
-                        <div className="md:ml-4">
-                          <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-lg text-center">
-                            <p className="text-sm font-medium">Active</p>
-                            <p className="text-xs">Click for details</p>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -166,4 +109,4 @@ const MyAppointments = () => {
   );
 };
 
-export default MyAppointments;
+export default AppointmentHistory;

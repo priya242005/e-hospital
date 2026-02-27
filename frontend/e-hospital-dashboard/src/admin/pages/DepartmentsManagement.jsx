@@ -30,9 +30,7 @@ export default function DepartmentsManagement() {
     try {
       const res = await axios.get(`${API_BASE}/hospitals`);
       setHospitals(res.data);
-      if (res.data.length > 0) {
-        setSelectedHospital(res.data[0].hospital_id);
-      }
+      // Don't auto-select first hospital
     } catch (error) {
       console.error('Error fetching hospitals:', error);
     }
@@ -79,7 +77,7 @@ export default function DepartmentsManagement() {
           onChange={(e) => setSelectedHospital(e.target.value)}
           className="border p-2 rounded w-full max-w-md"
         >
-          <option value="">Select Hospital</option>
+          <option value="">Choose a hospital</option>
           {hospitals.map((h) => (
             <option key={h.hospital_id} value={h.hospital_id}>
               {h.hospital_name}
@@ -173,9 +171,6 @@ export default function DepartmentsManagement() {
           <div key={dept.department_id} className="bg-white p-4 rounded-lg shadow">
             <h3 className="text-lg font-bold">{dept.department_name}</h3>
             <p className="text-sm text-gray-600">{dept.description || 'No description'}</p>
-            <span className={`inline-block mt-2 px-2 py-1 text-xs rounded ${dept.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-              {dept.is_active ? 'Active' : 'Inactive'}
-            </span>
           </div>
         ))}
       </div>

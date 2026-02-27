@@ -1,10 +1,38 @@
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import StatusBadge from '../components/StatusBadge';
+import axios from 'axios';
 
 const TokenConfirmation = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { tokenData, priority } = location.state || {};
+  const [hospitalName, setHospitalName] = useState('');
+  const [doctorName, setDoctorName] = useState('');
+
+  useEffect(() => {
+    if (tokenData) {
+      fetchDetails();
+    }
+  }, [tokenData]);
+
+  const fetchDetails = async () => {
+    try {
+      const [hospitalRes, doctorRes] = await Promise.all([
+        axios.get(`http://localhost:8000/hospitals/${tokenData.doctor_id.split('/')[0]}`).catch(() => null),
+        axios.get(`http://localhost:8000/doctors/${tokenData.doctor_id}`)
+      ]);
+      
+      if (doctorRes?.data) {
+        setDoctorName(doctorRes.data.name);
+        if (hospitalRes?.data) {
+          setHospitalName(hospitalRes.data.hospital_name || hospitalRes.data.name);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch details:', error);
+    }
+  };
 
   if (!tokenData) {
     return (
@@ -43,15 +71,19 @@ const TokenConfirmation = () => {
           </div>
 
           <div className="space-y-4 mb-8">
-            <div className="flex justify-between items-center border-b pb-3">
-              <span className="text-gray-600">Appointment ID</span>
-              <span className="font-semibold text-sm">{tokenData.appointment_id}</span>
-            </div>
+            {doctorName && (
+              <div className="flex justify-between items-center border-b pb-3">
+                <span className="text-gray-600">Doctor</span>
+                <span className="font-semibold">{doctorName}</span>
+              </div>
+            )}
 
-            <div className="flex justify-between items-center border-b pb-3">
-              <span className="text-gray-600">Doctor ID</span>
-              <span className="font-semibold text-sm">{tokenData.doctor_id}</span>
-            </div>
+            {hospitalName && (
+              <div className="flex justify-between items-center border-b pb-3">
+                <span className="text-gray-600">Hospital</span>
+                <span className="font-semibold">{hospitalName}</span>
+              </div>
+            )}
 
             <div className="flex justify-between items-center border-b pb-3">
               <span className="text-gray-600">Priority</span>
@@ -66,12 +98,10 @@ const TokenConfirmation = () => {
 
           <div className="space-y-3">
             <button
-              onClick={() => navigate('/waiting-time', { 
-                state: { tokenId: tokenData.token_id } 
-              })}
+              onClick={() => navigate('/my-appointments')}
               className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium"
             >
-              Track Waiting Time
+              View My Appointments
             </button>
 
             <button

@@ -91,33 +91,45 @@ def view_today_opd_queue(user_id: str = None):
 @router.get("/waiting-time/{token_id}")
 def get_waiting_time(token_id: str):
     today = date.today().isoformat()
-
+    
+    # Get the current token's data
+    token_doc = db.collection("opd_queue").document(token_id).get()
+    if not token_doc.exists:
+        raise HTTPException(status_code=404, detail="Token not found or consultation completed")
+    
+    token_data = token_doc.to_dict()
+    if token_data.get("status") != "waiting":
+        raise HTTPException(status_code=404, detail="Consultation completed")
+    
+    # Get all waiting patients for the same doctor on the same date
     docs = list(
         db.collection("opd_queue")
+        .where("doctor_id", "==", token_data.get("doctor_id"))
         .where("status", "==", "waiting")
         .where("opd_date", "==", today)
         .stream()
     )
 
+    # Sort by priority and token_time
     docs.sort(
         key=lambda d: (
             PRIORITY_ORDER.get(d.to_dict().get("priority", "normal"), 2),
-            d.to_dict()["token_time"]
+            d.to_dict().get("token_time", "")
         )
     )
 
+    # Find position in queue
     for index, doc in enumerate(docs):
         if doc.id == token_id:
-            data = doc.to_dict()
             return {
                 "token_id": token_id,
-                "doctor_id": data.get("doctor_id"),
-                "priority": data.get("priority"),
+                "doctor_id": token_data.get("doctor_id"),
+                "priority": token_data.get("priority"),
                 "patients_ahead": index,
                 "expected_waiting_time_min": index * AVG_CONSULT_TIME
             }
 
-    raise HTTPException(status_code=404, detail="Token not found or consultation completed")
+    raise HTTPException(status_code=404, detail="Token not found in queue")
 
 # -------------------- COMPLETE CONSULTATION --------------------
 

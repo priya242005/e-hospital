@@ -20,7 +20,7 @@ const Home = () => {
   const menuItems = [
     { title: 'Book OPD', path: '/opd-booking', icon: '📋', desc: 'Schedule appointment' },
     { title: 'My Appointments', path: '/my-appointments', icon: '📅', desc: 'View bookings' },
-    { title: 'Check Waiting Time', path: '/waiting-time', icon: '⏱️', desc: 'Queue status' },
+    { title: 'Appointment History', path: '/appointment-history', icon: '📜', desc: 'Past appointments' },
     { title: 'Bed Availability', path: '/bed-availability', icon: '🛏️', desc: 'Check beds' },
     { title: 'Pharmacy Info', path: '/pharmacy-info', icon: '💊', desc: 'Medicine stock' },
     { title: 'Add Family Member', path: '/add-patient', icon: '👨👩👧👦', desc: 'Add family' }

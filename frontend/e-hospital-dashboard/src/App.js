@@ -21,6 +21,7 @@ import PharmacyInfo from "./patient/pages/PharmacyInfo";
 import AddPatient from "./patient/pages/AddPatient";
 import MyAppointments from "./patient/pages/MyAppointments";
 import AppointmentDetails from "./patient/pages/AppointmentDetails";
+import AppointmentHistory from "./patient/pages/AppointmentHistory";
 import ProtectedRoute from "./patient/components/ProtectedRoute";
 
 function Layout() {
@@ -46,6 +47,7 @@ function Layout() {
           <Route path="/pharmacy-info" element={<ProtectedRoute><PharmacyInfo /></ProtectedRoute>} />
           <Route path="/my-appointments" element={<ProtectedRoute><MyAppointments /></ProtectedRoute>} />
           <Route path="/appointment-details" element={<ProtectedRoute><AppointmentDetails /></ProtectedRoute>} />
+          <Route path="/appointment-history" element={<ProtectedRoute><AppointmentHistory /></ProtectedRoute>} />
           
           <Route path="/admin" element={<AnalyticsDashboard />} />
           <Route path="/admin/hospitals" element={<HospitalsManagement />} />

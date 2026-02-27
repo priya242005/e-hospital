@@ -4,6 +4,14 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+// Suppress browser extension errors
+window.addEventListener('error', (e) => {
+  if (e.filename && e.filename.includes('chrome-extension://')) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }
+});
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
