@@ -13,7 +13,9 @@ ALGORITHM = "HS256"
 class UserRegister(BaseModel):
     name: str
     email: str
+    phone: str
     password: str
+    role: str = "patient"
 
 class UserLogin(BaseModel):
     email: str
@@ -38,6 +40,8 @@ def register(user: UserRegister):
     user_data = {
         "name": user.name,
         "email": user.email,
+        "phone": user.phone,
+        "role": user.role,
         "password": hashed_password.decode('utf-8'),
         "created_at": datetime.utcnow().isoformat()
     }
@@ -73,6 +77,7 @@ def login(user: UserLogin):
         "user": {
             "user_id": user_doc.id,
             "name": user_data["name"],
-            "email": user_data["email"]
+            "email": user_data["email"],
+            "role": user_data.get("role", "patient")
         }
     }

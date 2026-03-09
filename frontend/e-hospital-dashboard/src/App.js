@@ -13,6 +13,10 @@ import OPDManagement from "./admin/pages/OPDManagement";
 import Login from "./patient/pages/Login";
 import Register from "./patient/pages/Register";
 import Home from "./patient/pages/Home";
+
+import HospitalLogin from "./hospital/pages/HospitalLogin";
+import HospitalRegister from "./hospital/pages/HospitalRegister";
+import HospitalDashboard from "./hospital/pages/HospitalDashboard";
 import OPDBooking from "./patient/pages/OPDBooking";
 import TokenConfirmation from "./patient/pages/TokenConfirmation";
 import WaitingTime from "./patient/pages/WaitingTime";
@@ -37,6 +41,9 @@ function Layout() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/hospital/login" element={<HospitalLogin />} />
+          <Route path="/hospital/register" element={<HospitalRegister />} />
+          <Route path="/hospital/dashboard" element={<ProtectedRoute><HospitalDashboard /></ProtectedRoute>} />
           
           <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
           <Route path="/add-patient" element={<ProtectedRoute><AddPatient /></ProtectedRoute>} />
