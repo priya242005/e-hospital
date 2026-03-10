@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from app.firebase import db
 import uuid
 
@@ -6,6 +7,11 @@ router = APIRouter(
     prefix="/departments",
     tags=["Departments"]
 )
+
+class DepartmentCreate(BaseModel):
+    hospital_id: str
+    department_name: str
+    description: str = ""
 
 # -------------------- GET MASTER DEPARTMENTS --------------------
 @router.get("/master")
@@ -134,3 +140,34 @@ def seed_departments(hospital_id: str):
         "mapping_ids": created_mappings,
         "hospital_id": hospital_id
     }
+
+@router.post("/")
+def create_department(dept: DepartmentCreate):
+    """Create new department and link to hospital"""
+    # Create master department
+    dept_id = str(uuid.uuid4())
+    db.collection("master_departments").document(dept_id).set({
+        "department_id": dept_id,
+        "department_name": dept.department_name,
+        "description": dept.description
+    })
+    
+    # Link to hospital
+    mapping_id = str(uuid.uuid4())
+    db.collection("hospital_departments").document(mapping_id).set({
+        "mapping_id": mapping_id,
+        "hospital_id": dept.hospital_id,
+        "department_id": dept_id
+    })
+    
+    return {"message": "Department created", "department_id": dept_id}
+
+@router.delete("/{department_id}")
+def delete_department(department_id: str):
+    """Delete department mapping from hospital"""
+    # Delete hospital-department mappings
+    mappings = db.collection("hospital_departments").where("department_id", "==", department_id).stream()
+    for mapping in mappings:
+        db.collection("hospital_departments").document(mapping.id).delete()
+    
+    return {"message": "Department deleted from hospital"}

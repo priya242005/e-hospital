@@ -1,3 +1,12 @@
+import sys
+import subprocess
+try:
+    import jose
+    import passlib
+except ImportError:
+    print("Missing dependencies detected! Installing python-jose and passlib...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "python-jose", "passlib", "bcrypt<4.0.0"])
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,13 +18,13 @@ from app.routes import (
     appointments,
     opd,
     beds,
-    medicines,
-    pharmacy_queue,
-    alerts,
-    admin_analytics,
+    pharmacy,
+    notifications,
+    admin,
     auth,
     patient_records,
-    departments
+    departments,
+    public
 )
 
 app = FastAPI(title="Smart e-Hospital Management System")
@@ -24,12 +33,13 @@ app = FastAPI(title="Smart e-Hospital Management System")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],          # Frontend (localhost:3000) allowed
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],          # GET, POST, PUT, DELETE, OPTIONS
     allow_headers=["*"],
 )
 
 # -------------------- ROUTERS --------------------
+app.include_router(public.router)  # Public routes first (no auth)
 app.include_router(auth.router)
 app.include_router(patient_records.router)
 app.include_router(departments.router)
@@ -40,7 +50,6 @@ app.include_router(patients.router)
 app.include_router(appointments.router)
 app.include_router(opd.router)
 app.include_router(beds.router)
-app.include_router(medicines.router)
-app.include_router(pharmacy_queue.router)
-app.include_router(alerts.router)
-app.include_router(admin_analytics.router)
+app.include_router(pharmacy.router)
+app.include_router(notifications.router)
+app.include_router(admin.router)

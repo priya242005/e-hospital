@@ -1,31 +1,26 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.firebase import db
-from datetime import datetime, timedelta
-import jwt
+from datetime import datetime
+from app.auth_utils import create_access_token, get_password_hash, verify_password
 import bcrypt
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-SECRET_KEY = "your-secret-key-change-in-production"
-ALGORITHM = "HS256"
-
 class UserRegister(BaseModel):
     name: str
     email: str
-    phone: str
+    phone: str = None
     password: str
     role: str = "patient"
+    hospital_id: str = None
+    license_number: str = None
+    pharmacy_name: str = None
+    address: str = None
 
 class UserLogin(BaseModel):
     email: str
     password: str
-
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(hours=24)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 @router.post("/register")
 def register(user: UserRegister):
@@ -40,9 +35,13 @@ def register(user: UserRegister):
     user_data = {
         "name": user.name,
         "email": user.email,
-        "phone": user.phone,
+        "phone": user.phone if user.phone else "",
         "role": user.role,
         "password": hashed_password.decode('utf-8'),
+        "hospital_id": user.hospital_id if user.hospital_id else None,
+        "license_number": user.license_number if user.license_number else None,
+        "pharmacy_name": user.pharmacy_name if user.pharmacy_name else None,
+        "address": user.address if user.address else None,
         "created_at": datetime.utcnow().isoformat()
     }
     
@@ -50,6 +49,17 @@ def register(user: UserRegister):
     user_id = doc_ref[1].id
     
     return {"message": "User registered successfully", "user_id": user_id}
+
+@router.get("/users")
+def get_all_users():
+    users_ref = db.collection("users")
+    users = []
+    for doc in users_ref.stream():
+        user_data = doc.to_dict()
+        user_data['user_id'] = doc.id
+        user_data.pop('password', None)  # Remove password from response
+        users.append(user_data)
+    return users
 
 @router.post("/login")
 def login(user: UserLogin):
@@ -69,15 +79,34 @@ def login(user: UserLogin):
     if not bcrypt.checkpw(user.password.encode('utf-8'), user_data["password"].encode('utf-8')):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    access_token = create_access_token({"sub": user.email, "user_id": user_doc.id})
+    # Get hospital_id if hospital_admin
+    hospital_id = None
+    if user_data.get("role") == "hospital_admin":
+        hospitals = db.collection("hospitals").where("created_by", "==", user_doc.id).limit(1).stream()
+        for h in hospitals:
+            hospital_id = h.id
+            break
+    
+    # Create JWT token with all required fields
+    access_token = create_access_token({
+        "sub": user.email,
+        "user_id": user_doc.id,
+        "email": user.email,
+        "role": user_data.get("role", "patient"),
+        "hospital_id": hospital_id
+    })
     
     return {
         "access_token": access_token,
         "token_type": "bearer",
+        "role": user_data.get("role", "patient"),
+        "user_id": user_doc.id,
+        "hospital_id": hospital_id,
         "user": {
             "user_id": user_doc.id,
             "name": user_data["name"],
             "email": user_data["email"],
-            "role": user_data.get("role", "patient")
+            "role": user_data.get("role", "patient"),
+            "hospital_id": hospital_id
         }
     }

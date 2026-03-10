@@ -10,6 +10,7 @@ import DoctorsManagement from "./admin/pages/DoctorsManagement";
 import BedsManagement from "./admin/pages/BedsManagement";
 import OPDManagement from "./admin/pages/OPDManagement";
 
+import PublicHome from "./public/pages/PublicHome";
 import Login from "./patient/pages/Login";
 import Register from "./patient/pages/Register";
 import Home from "./patient/pages/Home";
@@ -17,6 +18,8 @@ import Home from "./patient/pages/Home";
 import HospitalLogin from "./hospital/pages/HospitalLogin";
 import HospitalRegister from "./hospital/pages/HospitalRegister";
 import HospitalDashboard from "./hospital/pages/HospitalDashboard";
+import PharmacyLogin from "./pharmacy/pages/PharmacyLogin";
+import PharmacyDashboard from "./pharmacy/pages/PharmacyDashboard";
 import OPDBooking from "./patient/pages/OPDBooking";
 import TokenConfirmation from "./patient/pages/TokenConfirmation";
 import WaitingTime from "./patient/pages/WaitingTime";
@@ -39,13 +42,16 @@ function Layout() {
 
       <div className={isAdminPage ? "ml-64 p-8" : ""}>
         <Routes>
+          <Route path="/" element={<PublicHome />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/hospital/login" element={<HospitalLogin />} />
           <Route path="/hospital/register" element={<HospitalRegister />} />
           <Route path="/hospital/dashboard" element={<ProtectedRoute><HospitalDashboard /></ProtectedRoute>} />
+          <Route path="/pharmacy/login" element={<PharmacyLogin />} />
+          <Route path="/pharmacy/dashboard" element={<ProtectedRoute><PharmacyDashboard /></ProtectedRoute>} />
           
-          <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path="/patient/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
           <Route path="/add-patient" element={<ProtectedRoute><AddPatient /></ProtectedRoute>} />
           <Route path="/opd-booking" element={<ProtectedRoute><OPDBooking /></ProtectedRoute>} />
           <Route path="/token-confirmation" element={<ProtectedRoute><TokenConfirmation /></ProtectedRoute>} />

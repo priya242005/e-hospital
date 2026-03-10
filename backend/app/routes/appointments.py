@@ -2,12 +2,24 @@ from fastapi import APIRouter, HTTPException
 from app.firebase import db
 from app.models.schemas import AppointmentCreate, OPDQueueCreate
 from datetime import datetime, date
+from pydantic import BaseModel
 import random
 
 router = APIRouter(
     prefix="/appointments",
     tags=["Appointments"]
 )
+
+class WalkInAppointment(BaseModel):
+    hospital_id: str
+    patient_name: str
+    age: int
+    gender: str
+    contact_number: str
+    department_id: str
+    doctor_id: str = None
+    priority: str = "normal"
+    appointment_date: str
 
 def generate_token_number():
     """Generate easy to remember 6-digit token number"""
@@ -21,6 +33,91 @@ def generate_token_number():
     sequence = len(tokens_today) + 1
     token = f"{today.day:02d}{today.month:02d}{sequence:02d}"
     return token
+
+@router.post("/walk-in")
+def create_walk_in_appointment(appointment: WalkInAppointment):
+    """Create walk-in appointment without patient_id"""
+    from uuid import uuid4
+    appointment_id = str(uuid4())
+    patient_id = str(uuid4())
+    
+    # Create temporary patient record
+    db.collection("walk_in_patients").document(patient_id).set({
+        "patient_id": patient_id,
+        "name": appointment.patient_name,
+        "age": appointment.age,
+        "gender": appointment.gender,
+        "contact_number": appointment.contact_number,
+        "created_at": datetime.now().isoformat()
+    })
+    
+    # Auto-assign doctor if not provided
+    doctor_id = appointment.doctor_id
+    if not doctor_id:
+        doctors = list(db.collection("doctors")
+            .where("hospital_id", "==", appointment.hospital_id)
+            .where("department_id", "==", appointment.department_id)
+            .where("availability", "==", "available")
+            .stream())
+        
+        if not doctors:
+            raise HTTPException(status_code=404, detail="No available doctors")
+        
+        # Load balancing
+        today = date.today().isoformat()
+        min_load = float("inf")
+        selected_doctor = None
+        
+        for doc in doctors:
+            load = len(list(db.collection("opd_queue")
+                .where("doctor_id", "==", doc.id)
+                .where("status", "==", "waiting")
+                .where("opd_date", "==", today)
+                .stream()))
+            if load < min_load:
+                min_load = load
+                selected_doctor = doc
+        
+        doctor_id = selected_doctor.id
+    
+    # Create appointment
+    db.collection("appointments").document(appointment_id).set({
+        "appointment_id": appointment_id,
+        "hospital_id": appointment.hospital_id,
+        "department_id": appointment.department_id,
+        "doctor_id": doctor_id,
+        "patient_id": patient_id,
+        "appointment_date": appointment.appointment_date,
+        "priority": appointment.priority,
+        "status": "booked",
+        "is_walk_in": True,
+        "created_at": datetime.now().isoformat()
+    })
+    
+    # Generate token
+    token_number = generate_token_number()
+    
+    # Create OPD queue entry
+    db.collection("opd_queue").document(token_number).set({
+        "token_id": token_number,
+        "appointment_id": appointment_id,
+        "hospital_id": appointment.hospital_id,
+        "department_id": appointment.department_id,
+        "doctor_id": doctor_id,
+        "patient_id": patient_id,
+        "patient_name": appointment.patient_name,
+        "priority": appointment.priority,
+        "status": "waiting",
+        "opd_date": appointment.appointment_date,
+        "token_time": datetime.now().isoformat()
+    })
+    
+    return {
+        "message": "Walk-in appointment booked",
+        "appointment_id": appointment_id,
+        "token_id": token_number,
+        "doctor_id": doctor_id
+    }
 
 @router.post("/")
 def create_appointment(appointment: AppointmentCreate):

@@ -6,6 +6,7 @@ const Register = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    phone: '',
     password: '',
     confirmPassword: ''
   });
@@ -32,12 +33,18 @@ const Register = () => {
       await axios.post('http://localhost:8000/auth/register', {
         name: formData.name,
         email: formData.email,
+        phone: formData.phone,
         password: formData.password
       });
       
       navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed');
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setError(detail.map(d => d.msg || 'Validation error').join(', '));
+      } else {
+        setError(typeof detail === 'string' ? detail : 'Registration failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -76,6 +83,18 @@ const Register = () => {
               type="email"
               name="email"
               value={formData.email}
+              onChange={handleChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+            <input
+              type="tel"
+              name="phone"
+              value={formData.phone}
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required

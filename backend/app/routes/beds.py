@@ -1,71 +1,67 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.firebase import db
-from datetime import date
+from datetime import datetime
+import uuid
+from typing import List
+
+from app.models.schemas import BedManagement, BedManagementCreate
+from app.auth_utils import get_current_user, require_role
 
 router = APIRouter(
     prefix="/beds",
-    tags=["Beds"]
+    tags=["Bed Management"]
 )
 
-# -------------------- CREATE / UPDATE BED STATUS --------------------
-@router.post("/")
-def update_beds(
-    hospital_id: str,
-    total_beds: int,
-    occupied_beds: int
+# -------------------- CREATE BED (Admin/Hospital) --------------------
+@router.post("/", response_model=BedManagement)
+def create_bed(
+    bed_data: BedManagementCreate,
+    current_user: dict = Depends(require_role(["hospital_admin", "admin"]))
 ):
-    if occupied_beds > total_beds:
-        raise HTTPException(
-            status_code=400,
-            detail="Occupied beds cannot exceed total beds"
-        )
-
-    available_beds = total_beds - occupied_beds
-    occupancy_percent = (occupied_beds / total_beds) * 100
-
-    if occupancy_percent < 70:
-        status = "green"
-    elif occupancy_percent <= 90:
-        status = "yellow"
-    else:
-        status = "red"
-
-    db.collection("beds").document(hospital_id).set({
-        "hospital_id": hospital_id,
-        "total_beds": total_beds,
-        "occupied_beds": occupied_beds,
-        "available_beds": available_beds,
-        "occupancy_percent": round(occupancy_percent, 2),
-        "status": status,
-        "last_updated": date.today().isoformat()
-    })
-
-    return {
-        "hospital_id": hospital_id,
-        "status": status,
-        "available_beds": available_beds
+    bed_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+    
+    new_bed = {
+        **bed_data.dict(),
+        "bed_id": bed_id,
+        "updated_at": now
     }
+    
+    db.collection("bed_management").document(bed_id).set(new_bed)
+    return new_bed
 
-
-# -------------------- GET ALL BED STATUS (CITY / ADMIN VIEW) --------------------
-@router.get("/")
-def get_all_beds():
+# -------------------- GET ALL BEDS BY HOSPITAL --------------------
+@router.get("/", response_model=List[BedManagement])
+def get_beds(hospital_id: str, current_user: dict = Depends(get_current_user)):
+    # Both patients and hospital staff might need to see available beds
+    beds_query = db.collection("bed_management").where("hospital_id", "==", hospital_id).stream()
+    
     beds = []
-    for doc in db.collection("beds").stream():
-        bed_data = doc.to_dict()
-        # Get hospital name
-        hospital_doc = db.collection("hospitals").document(bed_data["hospital_id"]).get()
-        if hospital_doc.exists:
-            bed_data["hospital_name"] = hospital_doc.to_dict().get("hospital_name", "Unknown")
-        beds.append(bed_data)
+    for doc in beds_query:
+        beds.append(doc.to_dict())
+        
     return beds
 
-
-# -------------------- GET SINGLE HOSPITAL BED STATUS --------------------
-@router.get("/{hospital_id}")
-def get_bed_status(hospital_id: str):
-    doc = db.collection("beds").document(hospital_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Hospital not found")
-
-    return doc.to_dict()
+# -------------------- UPDATE BED STATUS (Hospital Staff) --------------------
+@router.put("/{bed_id}")
+def update_bed_status(
+    bed_id: str,
+    status: str = None,
+    patient_id: str = None
+):
+    bed_ref = db.collection("bed_management").document(bed_id)
+    bed_doc = bed_ref.get()
+    
+    if not bed_doc.exists:
+        raise HTTPException(status_code=404, detail="Bed not found")
+    
+    updates = {"updated_at": datetime.utcnow().isoformat()}
+    if status:
+        if status not in ["available", "occupied", "reserved"]:
+            raise HTTPException(status_code=400, detail="Invalid status")
+        updates["status"] = status
+    if patient_id:
+        updates["patient_id"] = patient_id
+    
+    bed_ref.update(updates)
+    return {"message": "Bed updated", "bed_id": bed_id}

@@ -22,9 +22,14 @@ const Login = () => {
       
       localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      navigate('/');
+      navigate('/patient/home');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed');
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setError(detail.map(d => d.msg || 'Validation error').join(', '));
+      } else {
+        setError(typeof detail === 'string' ? detail : 'Login failed');
+      }
     } finally {
       setLoading(false);
     }

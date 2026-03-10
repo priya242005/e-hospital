@@ -150,58 +150,51 @@ class OPDQueue(BaseModel):
     opd_date: date
     token_time: datetime
 
-# ==================== BED ====================
-class BedUpdate(BaseModel):
-    total_beds: int
-    available_beds: int
-
-class Bed(BaseModel):
+# ==================== BED MANAGEMENT ====================
+class BedManagementCreate(BaseModel):
     hospital_id: str
-    total_beds: int
-    available_beds: int
-    status: Literal["green", "yellow", "red"]
-    last_updated: datetime
+    ward_number: str
+    bed_type: Literal["general", "icu", "emergency"]
+    status: Literal["available", "occupied", "reserved"] = "available"
+    patient_id: Optional[str] = None
 
-# ==================== PHARMACY ====================
-class PharmacyCreate(BaseModel):
+class BedManagement(BedManagementCreate):
+    bed_id: str
+    updated_at: datetime
+
+# ==================== PHARMACY INVENTORY ====================
+class PharmacyInventoryCreate(BaseModel):
     hospital_id: str
-    admin_user_id: str
-    pharmacy_name: str
-    contact_number: str
-
-class Pharmacy(BaseModel):
-    pharmacy_id: str
-    hospital_id: str
-    admin_user_id: str
-    pharmacy_name: str
-    contact_number: str
-
-# ==================== MEDICINE ====================
-class MedicineCreate(BaseModel):
-    pharmacy_id: str
     medicine_name: str
     stock_quantity: int
-    threshold_limit: int
+    minimum_threshold: int
+    expiry_date: date
 
-class Medicine(BaseModel):
+class PharmacyInventory(PharmacyInventoryCreate):
     medicine_id: str
-    pharmacy_id: str
-    medicine_name: str
-    stock_quantity: int
-    threshold_limit: int
     last_updated: datetime
 
-# ==================== ALERT ====================
-class AlertCreate(BaseModel):
+# ==================== PHARMACY QUEUE ====================
+class PharmacyQueueCreate(BaseModel):
+    token_id: str
+    patient_id: str
     hospital_id: str
-    type: Literal["bed", "medicine", "opd", "doctor"]
-    message: str
-    severity: Literal["info", "warning", "critical"]
+    medicine_list: list[str]
+    pharmacy_token: int
+    status: Literal["preparing", "ready", "collected"] = "preparing"
+    estimated_wait_time: int
 
-class Alert(BaseModel):
-    alert_id: str
+class PharmacyQueue(PharmacyQueueCreate):
+    prescription_id: str
+    created_at: datetime
+
+# ==================== NOTIFICATIONS ====================
+class NotificationCreate(BaseModel):
     hospital_id: str
-    type: str
+    type: Literal["bed_alert", "pharmacy_alert", "system"]
     message: str
-    severity: str
+    priority: Literal["low", "medium", "high"]
+
+class Notification(NotificationCreate):
+    notification_id: str
     created_at: datetime

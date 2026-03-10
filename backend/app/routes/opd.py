@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from app.firebase import db
 import time
 import uuid
 from datetime import date
+from app.auth_utils import get_current_user, require_role
 
 router = APIRouter(
     prefix="/opd",
@@ -131,14 +132,71 @@ def get_waiting_time(token_id: str):
 
     raise HTTPException(status_code=404, detail="Token not found in queue")
 
-# -------------------- COMPLETE CONSULTATION --------------------
+# -------------------- MANAGE CONSULTATION STATUS --------------------
 
-@router.put("/{token_id}")
-def complete_opd(token_id: str):
+@router.put("/{token_id}/status")
+def update_opd_status(
+    token_id: str, 
+    status: str,
+    current_user: dict = Depends(require_role(["hospital", "hospital_admin", "doctor", "admin"]))
+):
+    if status not in ["started", "completed", "skipped", "waiting"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
     doc_ref = db.collection("opd_queue").document(token_id)
 
     if not doc_ref.get().exists:
         raise HTTPException(status_code=404, detail="Token not found")
 
-    doc_ref.update({"status": "completed"})
-    return {"message": "Consultation completed"}
+    doc_ref.update({"status": status})
+    return {"message": f"Consultation marked as {status}"}
+
+@router.get("/queue/{hospital_id}")
+def get_hospital_opd_queue(hospital_id: str, current_user: dict = Depends(get_current_user)):
+    """Get OPD queue for a specific hospital"""
+    today = date.today().isoformat()
+    
+    queue_docs = db.collection("opd_queue") \
+        .where("hospital_id", "==", hospital_id) \
+        .where("opd_date", "==", today) \
+        .stream()
+    
+    result = []
+    for doc in queue_docs:
+        data = doc.to_dict()
+        data["token_id"] = doc.id
+        
+        # Check if patient_name is already in the document (walk-in patients)
+        if not data.get("patient_name") and data.get("patient_id"):
+            # Try family_members collection first
+            patient_doc = db.collection("family_members").document(data["patient_id"]).get()
+            if patient_doc.exists:
+                data["patient_name"] = patient_doc.to_dict().get("name")
+            else:
+                # Try walk_in_patients collection
+                walk_in_doc = db.collection("walk_in_patients").document(data["patient_id"]).get()
+                if walk_in_doc.exists:
+                    data["patient_name"] = walk_in_doc.to_dict().get("name")
+        
+        if data.get("doctor_id"):
+            doctor_doc = db.collection("doctors").document(data["doctor_id"]).get()
+            if doctor_doc.exists:
+                data["doctor_name"] = doctor_doc.to_dict().get("name")
+        
+        result.append(data)
+    
+    # Sort by priority and time
+    result.sort(key=lambda x: (PRIORITY_ORDER.get(x.get("priority", "normal"), 2), x.get("token_time", 0)))
+    
+    return result
+
+@router.put("/{token_id}")
+def update_consultation_status(token_id: str, status: str = "completed", current_user: dict = Depends(get_current_user)):
+    """Update consultation status - simplified for hospital dashboard"""
+    doc_ref = db.collection("opd_queue").document(token_id)
+    
+    if not doc_ref.get().exists:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    doc_ref.update({"status": status})
+    return {"message": f"Consultation marked as {status}"}
