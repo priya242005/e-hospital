@@ -77,6 +77,17 @@ export default function DoctorsManagement() {
     }
   };
 
+  const deleteAllDoctorsByHospital = async (hospitalId, hospitalName) => {
+    if (!window.confirm(`Delete ALL doctors for ${hospitalName}? This also removes their login accounts.`)) return;
+    try {
+      await axios.delete(`${API_BASE}/doctors/by-hospital/${hospitalId}`);
+      alert('All doctors deleted');
+      fetchDoctors(selectedHospital || null);
+    } catch (error) {
+      alert('Error deleting doctors');
+    }
+  };
+
   const deleteDoctor = async (doctorId) => {
     if (!window.confirm('Delete this doctor?')) return;
     try {
@@ -113,18 +124,31 @@ export default function DoctorsManagement() {
 
       <div className="mb-6">
         <label className="block text-sm font-medium mb-2">Filter by Hospital</label>
-        <select
-          value={selectedHospital}
-          onChange={(e) => setSelectedHospital(e.target.value)}
-          className="border p-2 rounded w-full max-w-md"
-        >
-          <option value="">All Hospitals</option>
-          {hospitals.map((h) => (
-            <option key={h.hospital_id} value={h.hospital_id}>
-              {h.hospital_name}
-            </option>
-          ))}
-        </select>
+        <div className="flex gap-3 items-center max-w-xl">
+          <select
+            value={selectedHospital}
+            onChange={(e) => setSelectedHospital(e.target.value)}
+            className="border p-2 rounded flex-1"
+          >
+            <option value="">All Hospitals</option>
+            {hospitals.map((h) => (
+              <option key={h.hospital_id} value={h.hospital_id}>
+                {h.hospital_name}
+              </option>
+            ))}
+          </select>
+          {selectedHospital && (
+            <button
+              onClick={() => {
+                const h = hospitals.find(h => h.hospital_id === selectedHospital);
+                deleteAllDoctorsByHospital(selectedHospital, h?.hospital_name || selectedHospital);
+              }}
+              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-semibold whitespace-nowrap"
+            >
+              🗑️ Delete All Doctors
+            </button>
+          )}
+        </div>
       </div>
 
       {showForm && (

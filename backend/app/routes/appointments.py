@@ -120,8 +120,8 @@ def create_walk_in_appointment(appointment: WalkInAppointment):
     }
 
 @router.post("/")
-def create_appointment(appointment: AppointmentCreate):
-    """Create appointment and generate OPD token"""
+def create_appointment(appointment: AppointmentCreate, bed_id: str = None):
+    """Create appointment and generate OPD token. Optionally reserve a bed."""
     from uuid import uuid4
     appointment_id = str(uuid4())
     
@@ -165,6 +165,7 @@ def create_appointment(appointment: AppointmentCreate):
         "appointment_date": appointment.appointment_date.isoformat(),
         "priority": appointment.priority,
         "status": "booked",
+        "bed_id": bed_id,
         "created_at": datetime.now().isoformat()
     })
     
@@ -185,11 +186,31 @@ def create_appointment(appointment: AppointmentCreate):
         "token_time": datetime.now().isoformat()
     })
     
+    # Reserve bed if requested
+    reserved_bed = None
+    if bed_id:
+        bed_ref = db.collection("bed_management").document(bed_id)
+        bed_doc = bed_ref.get()
+        if bed_doc.exists and bed_doc.to_dict().get("status") == "available":
+            bed_ref.update({
+                "status": "reserved",
+                "patient_id": appointment.patient_id,
+                "appointment_id": appointment_id,
+                "updated_at": datetime.now().isoformat()
+            })
+            reserved_bed = bed_doc.to_dict()
+        else:
+            raise HTTPException(status_code=400, detail="Selected bed is no longer available")
+
     return {
         "message": "Appointment booked and OPD token generated",
         "appointment_id": appointment_id,
         "token_id": token_number,
-        "doctor_id": doctor_id
+        "doctor_id": doctor_id,
+        "bed_reserved": reserved_bed is not None,
+        "bed_number": reserved_bed.get("bed_number") if reserved_bed else None,
+        "bed_type": reserved_bed.get("bed_type") if reserved_bed else None,
+        "ward_number": reserved_bed.get("ward_number") if reserved_bed else None
     }
 
 @router.get("/")

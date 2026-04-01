@@ -86,27 +86,43 @@ def login(user: UserLogin):
         for h in hospitals:
             hospital_id = h.id
             break
-    
+
+    # Get hospital_id if pharmacy_admin (stored directly on user record when created by hospital admin)
+    if user_data.get("role") == "pharmacy_admin":
+        hospital_id = user_data.get("hospital_id") or None
+
+    # Get doctor_id if doctor
+    doctor_id = None
+    if user_data.get("role") == "doctor":
+        doctors = db.collection("doctors").where("user_id", "==", user_doc.id).limit(1).stream()
+        for d in doctors:
+            doctor_id = d.id
+            hospital_id = d.to_dict().get("hospital_id")
+            break
+
     # Create JWT token with all required fields
     access_token = create_access_token({
         "sub": user.email,
         "user_id": user_doc.id,
         "email": user.email,
         "role": user_data.get("role", "patient"),
-        "hospital_id": hospital_id
+        "hospital_id": hospital_id,
+        "doctor_id": doctor_id
     })
-    
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "role": user_data.get("role", "patient"),
         "user_id": user_doc.id,
         "hospital_id": hospital_id,
+        "doctor_id": doctor_id,
         "user": {
             "user_id": user_doc.id,
             "name": user_data["name"],
             "email": user_data["email"],
             "role": user_data.get("role", "patient"),
-            "hospital_id": hospital_id
+            "hospital_id": hospital_id,
+            "doctor_id": doctor_id
         }
     }

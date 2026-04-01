@@ -7,7 +7,9 @@ const OPDBooking = () => {
   const [patients, setPatients] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [availableBeds, setAvailableBeds] = useState([]);
   const [bookingFor, setBookingFor] = useState('self');
+  const [needAdmission, setNeedAdmission] = useState(false);
   const [formData, setFormData] = useState({
     patientId: '',
     hospitalId: '',
@@ -15,11 +17,13 @@ const OPDBooking = () => {
     doctorId: '',
     appointmentDate: new Date().toISOString().split('T')[0],
     priority: 'normal',
-    autoAssign: false
+    autoAssign: false,
+    bedId: ''
   });
   const [loading, setLoading] = useState(false);
   const [loadingDepts, setLoadingDepts] = useState(false);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [loadingBeds, setLoadingBeds] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
@@ -43,6 +47,27 @@ const OPDBooking = () => {
       fetchDoctors(formData.hospitalId, formData.departmentId);
     }
   }, [formData.hospitalId, formData.departmentId]);
+
+  useEffect(() => {
+    if (formData.hospitalId && needAdmission) {
+      fetchAvailableBeds(formData.hospitalId);
+    } else {
+      setAvailableBeds([]);
+      setFormData(prev => ({ ...prev, bedId: '' }));
+    }
+  }, [formData.hospitalId, needAdmission]);
+
+  const fetchAvailableBeds = async (hospitalId) => {
+    setLoadingBeds(true);
+    try {
+      const response = await patientApi.getAvailableBeds(hospitalId);
+      setAvailableBeds(response.data);
+    } catch (error) {
+      setAvailableBeds([]);
+    } finally {
+      setLoadingBeds(false);
+    }
+  };
 
   const fetchHospitals = async () => {
     try {
@@ -114,7 +139,7 @@ const OPDBooking = () => {
         priority: formData.priority
       };
 
-      const response = await patientApi.createAppointment(appointmentData);
+      const response = await patientApi.createAppointment(appointmentData, needAdmission ? formData.bedId || null : null);
       
       navigate('/token-confirmation', {
         state: {
@@ -133,10 +158,7 @@ const OPDBooking = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <button
-          onClick={() => navigate('/')}
-          className="mb-6 text-white hover:text-blue-200 transition flex items-center gap-2"
-        >
+        <button onClick={() => navigate('/patient/home')} className="mb-6 text-white hover:text-blue-200 transition flex items-center gap-2">
           <span>←</span> Back to Home
         </button>
 
@@ -158,27 +180,13 @@ const OPDBooking = () => {
               <div className="bg-blue-50 rounded-xl p-6">
                 <label className="block text-lg font-semibold text-blue-900 mb-4">Booking For</label>
                 <div className="grid grid-cols-2 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setBookingFor('self')}
-                    className={`py-4 px-6 rounded-xl font-medium transition ${
-                      bookingFor === 'self'
-                        ? 'bg-blue-900 text-white shadow-lg'
-                        : 'bg-white text-blue-900 border-2 border-blue-200 hover:border-blue-400'
-                    }`}
-                  >
-                    👤 Self
+                  <button type="button" onClick={() => setBookingFor('self')}
+                    className={`py-4 px-6 rounded-xl font-medium transition ${bookingFor === 'self' ? 'bg-blue-900 text-white shadow-lg' : 'bg-white text-blue-900 border-2 border-blue-200 hover:border-blue-400'}`}>
+                    Self
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setBookingFor('family')}
-                    className={`py-4 px-6 rounded-xl font-medium transition ${
-                      bookingFor === 'family'
-                        ? 'bg-blue-900 text-white shadow-lg'
-                        : 'bg-white text-blue-900 border-2 border-blue-200 hover:border-blue-400'
-                    }`}
-                  >
-                    👨‍👩‍👧‍👦 Family
+                  <button type="button" onClick={() => setBookingFor('family')}
+                    className={`py-4 px-6 rounded-xl font-medium transition ${bookingFor === 'family' ? 'bg-blue-900 text-white shadow-lg' : 'bg-white text-blue-900 border-2 border-blue-200 hover:border-blue-400'}`}>
+                    Family Member
                   </button>
                 </div>
               </div>
@@ -329,13 +337,77 @@ const OPDBooking = () => {
                 </div>
               </div>
 
+              {/* Bed Admission Section */}
+              <div className="border-2 border-dashed border-blue-200 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="font-semibold text-gray-800">Need Admission?</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Reserve a bed at the same hospital</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNeedAdmission(!needAdmission);
+                      setFormData(prev => ({ ...prev, bedId: '' }));
+                    }}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      needAdmission ? 'bg-blue-900' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                      needAdmission ? 'translate-x-7' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {needAdmission && (
+                  <div className="mt-3">
+                    {!formData.hospitalId ? (
+                      <p className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">Please select a hospital first</p>
+                    ) : loadingBeds ? (
+                      <p className="text-sm text-gray-500 p-3">Loading available beds...</p>
+                    ) : availableBeds.length === 0 ? (
+                      <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">⚠️ No beds available at this hospital</p>
+                    ) : (
+                      <>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Select Bed</label>
+                        <select
+                          value={formData.bedId}
+                          onChange={(e) => setFormData({ ...formData, bedId: e.target.value })}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          required={needAdmission}
+                        >
+                          <option value="">Choose a bed</option>
+                          {['general', 'icu', 'emergency'].map(type => {
+                            const bedsOfType = availableBeds.filter(b => b.bed_type === type);
+                            if (!bedsOfType.length) return null;
+                            return (
+                              <optgroup key={type} label={`${type.toUpperCase()} (${bedsOfType.length} available)`}>
+                                {bedsOfType.map(bed => (
+                                  <option key={bed.bed_id} value={bed.bed_id}>
+                                    Bed {bed.bed_number} — Ward {bed.ward_number}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            );
+                          })}
+                        </select>
+                        <p className="text-xs text-blue-700 mt-2 bg-blue-50 p-2 rounded">
+                          Bed will be reserved until confirmed by hospital staff.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading || (bookingFor === 'family' && patients.length === 0)}
                 className="w-full bg-gradient-to-r from-blue-900 to-blue-700 text-white py-4 rounded-xl font-bold text-lg hover:from-blue-800 hover:to-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
-                {loading ? 'Booking...' : '📋 Book Appointment'}
+                {loading ? 'Booking...' : 'Book Appointment'}
               </button>
             </form>
           </div>

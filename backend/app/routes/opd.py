@@ -151,6 +151,109 @@ def update_opd_status(
     doc_ref.update({"status": status})
     return {"message": f"Consultation marked as {status}"}
 
+@router.get("/doctor/{doctor_id}")
+def get_doctor_queue(doctor_id: str, current_user: dict = Depends(get_current_user)):
+    """Get today's full OPD queue for a specific doctor with position, waiting time, and bed info."""
+    today = date.today().isoformat()
+
+    docs = list(
+        db.collection("opd_queue")
+        .where("doctor_id", "==", doctor_id)
+        .where("opd_date", "==", today)
+        .stream()
+    )
+
+    result = []
+    for doc in docs:
+        data = doc.to_dict()
+        data["token_id"] = doc.id
+
+        # Enrich patient name
+        if not data.get("patient_name") and data.get("patient_id"):
+            for col in ["family_members", "users", "walk_in_patients"]:
+                pdoc = db.collection(col).document(data["patient_id"]).get()
+                if pdoc.exists:
+                    data["patient_name"] = pdoc.to_dict().get("name", "Patient")
+                    break
+
+        # Enrich bed info for this patient
+        if data.get("patient_id"):
+            beds = list(
+                db.collection("bed_management")
+                .where("patient_id", "==", data["patient_id"])
+                .stream()
+            )
+            for bed in beds:
+                bd = bed.to_dict()
+                if bd.get("status") in ("reserved", "occupied"):
+                    data["bed_number"] = bd.get("bed_number")
+                    data["ward_number"] = bd.get("ward_number")
+                    data["bed_type"] = bd.get("bed_type")
+                    data["bed_status"] = bd.get("status")
+                    break
+
+        result.append(data)
+
+    # Separate waiting vs completed
+    waiting = [r for r in result if r.get("status") == "waiting"]
+    completed = [r for r in result if r.get("status") != "waiting"]
+
+    # Sort waiting by priority then token_time
+    waiting.sort(key=lambda x: (
+        PRIORITY_ORDER.get(x.get("priority", "normal"), 2),
+        x.get("token_time", 0)
+    ))
+
+    # Assign position and waiting time
+    for i, item in enumerate(waiting):
+        item["position"] = i + 1
+        item["waiting_minutes"] = i * AVG_CONSULT_TIME
+
+    for item in completed:
+        item["position"] = None
+        item["waiting_minutes"] = 0
+
+    return {
+        "waiting": waiting,
+        "completed": completed,
+        "total_today": len(result),
+        "waiting_count": len(waiting),
+        "completed_count": len(completed)
+    }
+
+@router.get("/doctor/{doctor_id}/history")
+def get_doctor_history(doctor_id: str, current_user: dict = Depends(get_current_user)):
+    """All-time completed patients for a doctor across all dates."""
+    docs = list(
+        db.collection("opd_queue")
+        .where("doctor_id", "==", doctor_id)
+        .where("status", "==", "completed")
+        .stream()
+    )
+
+    result = []
+    for doc in docs:
+        data = doc.to_dict()
+        data["token_id"] = doc.id
+
+        if not data.get("patient_name") and data.get("patient_id"):
+            for col in ["family_members", "users", "walk_in_patients"]:
+                pdoc = db.collection(col).document(data["patient_id"]).get()
+                if pdoc.exists:
+                    data["patient_name"] = pdoc.to_dict().get("name", "Patient")
+                    break
+
+        # Department name
+        if data.get("department_id"):
+            ddoc = db.collection("master_departments").document(data["department_id"]).get()
+            if ddoc.exists:
+                data["department_name"] = ddoc.to_dict().get("department_name", "")
+
+        result.append(data)
+
+    result.sort(key=lambda x: x.get("opd_date", ""), reverse=True)
+    return result
+
 @router.get("/queue/{hospital_id}")
 def get_hospital_opd_queue(hospital_id: str, current_user: dict = Depends(get_current_user)):
     """Get OPD queue for a specific hospital"""

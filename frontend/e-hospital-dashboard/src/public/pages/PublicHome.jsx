@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import HospitalMap from '../components/HospitalMap';
 
 const PublicHome = () => {
   const [bedStats, setBedStats] = useState({ general: 0, icu: 0, emergency: 0 });
   const [hospitals, setHospitals] = useState([]);
+  const [mapHospitals, setMapHospitals] = useState([]);
   const [searchCity, setSearchCity] = useState('');
   const [searchHospital, setSearchHospital] = useState('');
   const [announcements] = useState([
@@ -19,9 +21,10 @@ const PublicHome = () => {
 
   const fetchPublicData = async () => {
     try {
-      const [bedsRes, hospitalsRes] = await Promise.all([
+      const [bedsRes, hospitalsRes, mapRes] = await Promise.all([
         axios.get('http://localhost:8000/public/bed-availability'),
-        axios.get('http://localhost:8000/hospitals')
+        axios.get('http://localhost:8000/hospitals'),
+        axios.get('http://localhost:8000/public/hospital-map')
       ]);
       
       const beds = bedsRes.data || [];
@@ -31,6 +34,7 @@ const PublicHome = () => {
         emergency: beds.reduce((sum, h) => sum + (h.emergency_beds || 0), 0)
       });
       setHospitals(hospitalsRes.data || []);
+      setMapHospitals(mapRes.data || []);
     } catch (error) {
       console.error('Failed to fetch data');
     }
@@ -238,6 +242,17 @@ const PublicHome = () => {
           </div>
         </section>
 
+        {/* Hospital Map */}
+        <section id="map">
+          <h2 className="text-3xl font-bold text-[#0b1f3a] mb-3">🗺️ Hospital Locations Map</h2>
+          <div className="flex gap-6 mb-4 text-sm">
+            <span className="flex items-center gap-2"><span className="w-4 h-4 rounded-full bg-green-600 inline-block"></span> Good Availability (&lt;60% full)</span>
+            <span className="flex items-center gap-2"><span className="w-4 h-4 rounded-full bg-yellow-600 inline-block"></span> Limited (60–85% full)</span>
+            <span className="flex items-center gap-2"><span className="w-4 h-4 rounded-full bg-red-600 inline-block"></span> Critical (&gt;85% full)</span>
+          </div>
+          <HospitalMap hospitals={mapHospitals} />
+        </section>
+
         {/* Nearby Hospital Finder */}
         <section className="bg-white rounded-lg shadow-lg p-8">
           <h2 className="text-3xl font-bold text-[#0b1f3a] mb-6">🗺️ Nearby Hospital Finder</h2>
@@ -271,6 +286,11 @@ const PublicHome = () => {
               <div className="text-5xl mb-4">💊</div>
               <h3 className="text-xl font-bold">Pharmacy Portal</h3>
               <p className="text-sm mt-2 opacity-90">Manage inventory & prescriptions</p>
+            </button>
+            <button onClick={() => navigate('/doctor/login')} className="bg-gradient-to-br from-teal-500 to-teal-700 text-white p-8 rounded-xl shadow-lg hover:shadow-2xl transition text-center">
+              <div className="text-5xl mb-4">🩺</div>
+              <h3 className="text-xl font-bold">Doctor Portal</h3>
+              <p className="text-sm mt-2 opacity-90">View patients & manage consultations</p>
             </button>
             <button onClick={() => navigate('/admin')} className="bg-gradient-to-br from-red-500 to-red-700 text-white p-8 rounded-xl shadow-lg hover:shadow-2xl transition text-center">
               <div className="text-5xl mb-4">⚙️</div>

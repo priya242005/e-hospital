@@ -39,11 +39,11 @@ const Login = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-[#0b1f3a] rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl text-white">🏥</span>
+          <div className="w-12 h-12 bg-[#0b1f3a] rounded-xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-white font-bold text-lg">e+</span>
           </div>
-          <h1 className="text-3xl font-bold text-[#0b1f3a]">Smart e-Hospital</h1>
-          <p className="text-gray-600 mt-2">Patient Login Portal</p>
+          <h1 className="text-2xl font-bold text-[#0b1f3a]">Smart e-Hospital</h1>
+          <p className="text-gray-500 text-sm mt-1">Patient Login Portal</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">

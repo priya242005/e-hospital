@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 from app.firebase import db
 from app.models.schemas import DoctorCreate
 from datetime import datetime, date
+from app.auth_utils import get_password_hash
 import uuid
 
 router = APIRouter(
@@ -9,22 +12,51 @@ router = APIRouter(
     tags=["Doctors"]
 )
 
+class DoctorCreateWithAuth(BaseModel):
+    hospital_id: str
+    department_id: str
+    name: str
+    specialization: str
+    email: str
+    password: str
+    contact_number: Optional[str] = None
+    max_daily_opd: Optional[int] = None
+
 # -------------------- CREATE DOCTOR --------------------
 @router.post("/")
-def create_doctor(doctor: DoctorCreate):
+def create_doctor(doctor: DoctorCreateWithAuth):
+    # Check email not already used
+    existing = list(db.collection("users").where("email", "==", doctor.email).limit(1).stream())
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Create auth user
+    user_id = str(uuid.uuid4())
+    db.collection("users").document(user_id).set({
+        "name": doctor.name,
+        "email": doctor.email,
+        "phone": doctor.contact_number or "",
+        "role": "doctor",
+        "password": get_password_hash(doctor.password),
+        "hospital_id": doctor.hospital_id,
+        "created_at": datetime.utcnow().isoformat()
+    })
+
+    # Create doctor record linked to user
     doctor_id = str(uuid.uuid4())
-    
     db.collection("doctors").document(doctor_id).set({
         "doctor_id": doctor_id,
+        "user_id": user_id,
         "name": doctor.name,
         "hospital_id": doctor.hospital_id,
         "department_id": doctor.department_id,
         "specialization": doctor.specialization,
+        "contact_number": doctor.contact_number or "",
         "availability": "available",
         "max_daily_opd": doctor.max_daily_opd,
         "created_at": datetime.now().isoformat()
     })
-    return {"message": "Doctor created successfully", "doctor_id": doctor_id}
+    return {"message": "Doctor created successfully", "doctor_id": doctor_id, "user_id": user_id, "email": doctor.email}
 
 # -------------------- GET ALL DOCTORS --------------------
 @router.get("/")
@@ -91,6 +123,17 @@ def assign_doctor(hospital_id: str, department_id: str):
         "current_load": min_load
     }
 
+# -------------------- GET DOCTOR BY USER --------------------
+@router.get("/by-user/{user_id}")
+def get_doctor_by_user(user_id: str):
+    """Find doctor record linked to a user_id"""
+    docs = list(db.collection("doctors").where("user_id", "==", user_id).stream())
+    if not docs:
+        raise HTTPException(status_code=404, detail="Doctor not found for this user")
+    data = docs[0].to_dict()
+    data["doctor_id"] = docs[0].id
+    return data
+
 # -------------------- GET ONE DOCTOR --------------------
 @router.get("/{doctor_id}")
 def get_doctor(doctor_id: str):
@@ -121,6 +164,21 @@ def update_doctor(
     ref.update(data)
     return {"message": "Doctor updated successfully"}
 
+# -------------------- DELETE ALL DOCTORS BY HOSPITAL --------------------
+@router.delete("/by-hospital/{hospital_id}")
+def delete_doctors_by_hospital(hospital_id: str):
+    """Delete all doctors and their linked user accounts for a hospital"""
+    doctors = list(db.collection("doctors").where("hospital_id", "==", hospital_id).stream())
+    deleted = 0
+    for doc in doctors:
+        data = doc.to_dict()
+        # Delete linked user account
+        if data.get("user_id"):
+            db.collection("users").document(data["user_id"]).delete()
+        db.collection("doctors").document(doc.id).delete()
+        deleted += 1
+    return {"message": f"{deleted} doctors deleted", "hospital_id": hospital_id}
+
 # -------------------- DELETE DOCTOR --------------------
 @router.delete("/{doctor_id}")
 def delete_doctor(doctor_id: str):
@@ -133,7 +191,7 @@ def delete_doctor(doctor_id: str):
 # -------------------- SEED DOCTORS --------------------
 @router.post("/seed")
 def seed_doctors(hospital_id: str):
-    """Create dummy doctors - requires departments to exist first"""
+    """Create dummy doctors with auto-generated credentials: firstname@gmail.com / password: 12"""
     if not hospital_id:
         raise HTTPException(status_code=400, detail="hospital_id is required")
     
@@ -178,13 +236,38 @@ def seed_doctors(hospital_id: str):
         {"name": "Dr. Swati Pillai", "dept": "Emergency Medicine", "spec": "Trauma Specialist"}
     ]
     
-    created_ids = []
+    created = []
+    skipped = []
     for doctor in doctors_data:
         if doctor["dept"] not in dept_map:
             continue
+        # Extract first name: "Dr. Rajesh Kumar" -> "rajesh"
+        parts = doctor["name"].replace("Dr. ", "").split()
+        first_name = parts[0].lower()
+        email = f"{first_name}@gmail.com"
+
+        # Skip if email already exists
+        existing = list(db.collection("users").where("email", "==", email).limit(1).stream())
+        if existing:
+            skipped.append(email)
+            continue
+
+        # Create user account
+        user_id = str(uuid.uuid4())
+        db.collection("users").document(user_id).set({
+            "name": doctor["name"],
+            "email": email,
+            "phone": "",
+            "role": "doctor",
+            "password": get_password_hash("12"),
+            "hospital_id": hospital_id,
+            "created_at": datetime.utcnow().isoformat()
+        })
+
         doctor_id = str(uuid.uuid4())
         db.collection("doctors").document(doctor_id).set({
             "doctor_id": doctor_id,
+            "user_id": user_id,
             "name": doctor["name"],
             "hospital_id": hospital_id,
             "department_id": dept_map[doctor["dept"]],
@@ -193,6 +276,11 @@ def seed_doctors(hospital_id: str):
             "max_daily_opd": None,
             "created_at": datetime.now().isoformat()
         })
-        created_ids.append(doctor_id)
+        created.append({"name": doctor["name"], "email": email, "doctor_id": doctor_id})
     
-    return {"message": f"{len(created_ids)} doctors created successfully", "doctor_ids": created_ids, "hospital_id": hospital_id}
+    return {
+        "message": f"{len(created)} doctors created, {len(skipped)} skipped (email conflict)",
+        "created": created,
+        "skipped": skipped,
+        "hospital_id": hospital_id
+    }

@@ -23,8 +23,14 @@ const HospitalDashboard = () => {
   const [showPatientSelectModal, setShowPatientSelectModal] = useState(false);
   const [patientsNeedingBeds, setPatientsNeedingBeds] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [reservedBeds, setReservedBeds] = useState([]);
+  const [occupiedBeds, setOccupiedBeds] = useState([]);
+  const [showDischargeModal, setShowDischargeModal] = useState(false);
+  const [dischargeTarget, setDischargeTarget] = useState(null);
+  const [dischargeNote, setDischargeNote] = useState('');
+  const [pharmacyAlerts, setPharmacyAlerts] = useState([]);
   
-  const [doctorForm, setDoctorForm] = useState({ name: '', department_id: '', specialization: '', contact_number: '', email: '' });
+  const [doctorForm, setDoctorForm] = useState({ name: '', department_id: '', specialization: '', contact_number: '', email: '', password: '' });
   const [pharmacyForm, setPharmacyForm] = useState({ name: '', email: '', password: '', phone: '' });
   const [bedForm, setBedForm] = useState({ ward_name: '', ward_number: '', total_beds: '', bed_type: 'general' });
   const [departmentForm, setDepartmentForm] = useState({ department_name: '', description: '' });
@@ -76,7 +82,19 @@ const HospitalDashboard = () => {
       setOpdQueue(queueRes.data || []);
       setDoctors(doctorsRes.data || []);
       setDepartments(deptsRes.data || []);
-      
+
+      const reservedRes = await axios.get(`http://localhost:8000/beds/reserved/${hId}`, { headers });
+      setReservedBeds(reservedRes.data || []);
+
+      const occupiedRes = await axios.get(`http://localhost:8000/beds/occupied/${hId}`, { headers });
+      setOccupiedBeds(occupiedRes.data || []);
+
+      // Fetch pharmacy alerts — computed live from pharmacy_inventory for this hospital
+      try {
+        const alertRes = await axios.get(`http://localhost:8000/pharmacy/alerts/${hId}`);
+        setPharmacyAlerts(alertRes.data || []);
+      } catch (_e) { setPharmacyAlerts([]); }
+
       // Fetch pharmacy staff - filter by role
       const usersRes = await axios.get(`http://localhost:8000/auth/users`, { headers });
       const pharmacyUsers = (usersRes.data || []).filter(u => u.role === 'pharmacy_admin' && u.hospital_id === hId);
@@ -130,19 +148,27 @@ const HospitalDashboard = () => {
 
   const handleAddDoctor = async (e) => {
     e.preventDefault();
+    if (!doctorForm.email || !doctorForm.password) {
+      alert('Email and password are required for doctor login credentials');
+      return;
+    }
     try {
       const token = localStorage.getItem('token');
       await axios.post('http://localhost:8000/doctors', {
-        ...doctorForm,
+        name: doctorForm.name,
+        department_id: doctorForm.department_id,
+        specialization: doctorForm.specialization,
+        contact_number: doctorForm.contact_number,
+        email: doctorForm.email,
+        password: doctorForm.password,
         hospital_id: hospitalId,
-        availability: 'available'
       }, { headers: { Authorization: `Bearer ${token}` } });
-      alert('Doctor added successfully');
+      alert(`Doctor added! Login: ${doctorForm.email} / ${doctorForm.password}`);
       setShowDoctorModal(false);
-      setDoctorForm({ name: '', department_id: '', specialization: '', contact_number: '', email: '' });
+      setDoctorForm({ name: '', department_id: '', specialization: '', contact_number: '', email: '', password: '' });
       fetchHospitalData(user.user_id);
     } catch (error) {
-      alert('Failed to add doctor');
+      alert(error.response?.data?.detail || 'Failed to add doctor');
     }
   };
 
@@ -263,6 +289,49 @@ const HospitalDashboard = () => {
     }
   };
 
+  const handleConfirmBed = async (bedId, patientId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(`http://localhost:8000/beds/${bedId}?status=occupied&patient_id=${patientId}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchHospitalData(user.user_id);
+    } catch (error) {
+      alert('Failed to confirm bed');
+    }
+  };
+
+  const handleRejectBed = async (bedId) => {
+    if (!window.confirm('Reject this bed request? The bed will be released back to available.')) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(`http://localhost:8000/beds/${bedId}?status=available`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchHospitalData(user.user_id);
+    } catch (error) {
+      alert('Failed to reject bed request');
+    }
+  };
+
+  const handleDischargeBed = async () => {
+    if (!dischargeTarget) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(
+        `http://localhost:8000/beds/${dischargeTarget.bed_id}?status=available&discharge_note=${encodeURIComponent(dischargeNote)}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setShowDischargeModal(false);
+      setDischargeTarget(null);
+      setDischargeNote('');
+      fetchHospitalData(user.user_id);
+    } catch (error) {
+      alert('Failed to discharge patient');
+    }
+  };
+
   const filteredBeds = bedTypeFilter === 'all' ? beds : beds.filter(b => b.bed_type === bedTypeFilter);
   const sortedBeds = [...filteredBeds].sort((a, b) => {
     if (a.status === 'available' && b.status !== 'available') return -1;
@@ -291,9 +360,11 @@ const HospitalDashboard = () => {
             { id: 'departments', icon: '🏢', label: 'Departments' },
             { id: 'doctors', icon: '👨‍⚕️', label: 'Doctors' },
             { id: 'beds', icon: '🛏️', label: 'Beds' },
-            { id: 'pharmacy-staff', icon: '👥', label: 'Pharmacy Staff' },
+            { id: 'bed-requests', icon: '📥', label: `Bed Requests${reservedBeds.length ? ` (${reservedBeds.length})` : ''}` },
+            { id: 'occupied-beds', icon: '👥', label: `Occupied Beds${occupiedBeds.length ? ` (${occupiedBeds.length})` : ''}` },
+            { id: 'pharmacy-staff', icon: '👨‍👩‍👧‍👦', label: 'Pharmacy Staff' },
             { id: 'pharmacy', icon: '💊', label: 'Pharmacy' },
-            { id: 'alerts', icon: '🔔', label: 'Alerts' }
+            { id: 'alerts', icon: '🔔', label: `Alerts${pharmacyAlerts.length ? ` (${pharmacyAlerts.length})` : ''}` }
           ].map(item => (
             <button
               key={item.id}
@@ -571,53 +642,85 @@ const HospitalDashboard = () => {
                 <h2 className="text-2xl font-bold text-gray-800">Bed Management</h2>
                 <button onClick={() => setShowBedModal(true)} className="bg-[#0b1f3a] text-white px-6 py-2 rounded-lg hover:bg-blue-900">+ Add Ward & Beds</button>
               </div>
-              
-              {/* Bed Type Filter */}
-              <div className="flex gap-2">
-                <button onClick={() => setBedTypeFilter('all')} className={`px-4 py-2 rounded-lg font-semibold ${bedTypeFilter === 'all' ? 'bg-[#0b1f3a] text-white' : 'bg-gray-200 text-gray-700'}`}>All ({beds.length})</button>
-                <button onClick={() => setBedTypeFilter('general')} className={`px-4 py-2 rounded-lg font-semibold ${bedTypeFilter === 'general' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'}`}>General ({beds.filter(b => b.bed_type === 'general').length})</button>
-                <button onClick={() => setBedTypeFilter('icu')} className={`px-4 py-2 rounded-lg font-semibold ${bedTypeFilter === 'icu' ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-700'}`}>ICU ({beds.filter(b => b.bed_type === 'icu').length})</button>
-                <button onClick={() => setBedTypeFilter('emergency')} className={`px-4 py-2 rounded-lg font-semibold ${bedTypeFilter === 'emergency' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700'}`}>Emergency ({beds.filter(b => b.bed_type === 'emergency').length})</button>
-              </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {sortedBeds.map((bed) => (
-                  <div
-                    key={bed.bed_id}
-                    onClick={() => handleBedClick(bed)}
-                    className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                      bed.bed_type === 'general' ? 'border-blue-400' :
-                      bed.bed_type === 'icu' ? 'border-orange-400' :
-                      'border-red-400'
-                    } ${
-                      bed.status === 'available' ? (bed.bed_type === 'general' ? 'bg-blue-50 hover:bg-blue-100' : bed.bed_type === 'icu' ? 'bg-orange-50 hover:bg-orange-100' : 'bg-red-50 hover:bg-red-100') :
-                      bed.status === 'reserved' ? 'bg-yellow-50 opacity-60' :
-                      'bg-gray-100 opacity-40'
-                    } ${selectedBed?.bed_id === bed.bed_id ? 'ring-4 ring-green-500' : ''}`}
-                  >
-                    <p className="text-xs text-gray-600 font-semibold">Ward {bed.ward_number}</p>
-                    <p className="text-lg font-bold mt-1">{bed.bed_number}</p>
-                    <p className={`text-xs font-semibold mt-2 px-2 py-1 rounded ${
-                      bed.bed_type === 'general' ? 'bg-blue-200 text-blue-800' :
-                      bed.bed_type === 'icu' ? 'bg-orange-200 text-orange-800' :
-                      'bg-red-200 text-red-800'
-                    }`}>{bed.bed_type.toUpperCase()}</p>
-                    <p className={`text-xs font-semibold mt-1 ${
-                      bed.status === 'available' ? 'text-green-600' :
-                      bed.status === 'reserved' ? 'text-yellow-600' :
-                      'text-gray-600'
-                    }`}>{bed.status.toUpperCase()}</p>
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: 'Total Beds', value: beds.length, color: 'bg-[#0b1f3a] text-white' },
+                  { label: 'Available', value: beds.filter(b => b.status === 'available').length, color: 'bg-green-600 text-white' },
+                  { label: 'Occupied', value: beds.filter(b => b.status === 'occupied').length, color: 'bg-red-500 text-white' },
+                  { label: 'Reserved', value: beds.filter(b => b.status === 'reserved').length, color: 'bg-yellow-500 text-white' },
+                ].map(s => (
+                  <div key={s.label} className={`${s.color} rounded-xl p-4 text-center shadow`}>
+                    <p className="text-3xl font-bold">{s.value}</p>
+                    <p className="text-sm mt-1 opacity-90">{s.label}</p>
                   </div>
                 ))}
               </div>
-              
-              {selectedBed && !showPatientSelectModal && (
-                <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow-2xl p-6 border-2 border-green-500">
-                  <h3 className="font-bold text-lg mb-2">Selected Bed: {selectedBed.bed_number}</h3>
-                  <p className="text-sm text-gray-600 mb-4">Ward {selectedBed.ward_number} - {selectedBed.bed_type.toUpperCase()}</p>
-                  <button onClick={() => setSelectedBed(null)} className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 font-semibold">Cancel</button>
-                </div>
-              )}
+
+              {/* Bed Type Filter */}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { key: 'all', label: 'All', count: beds.length, active: 'bg-[#0b1f3a] text-white', inactive: 'bg-gray-100 text-gray-700' },
+                  { key: 'general', label: 'General', count: beds.filter(b => b.bed_type === 'general').length, active: 'bg-blue-600 text-white', inactive: 'bg-blue-50 text-blue-700' },
+                  { key: 'icu', label: 'ICU', count: beds.filter(b => b.bed_type === 'icu').length, active: 'bg-orange-500 text-white', inactive: 'bg-orange-50 text-orange-700' },
+                  { key: 'emergency', label: 'Emergency', count: beds.filter(b => b.bed_type === 'emergency').length, active: 'bg-red-600 text-white', inactive: 'bg-red-50 text-red-700' },
+                ].map(f => (
+                  <button key={f.key} onClick={() => setBedTypeFilter(f.key)}
+                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition ${bedTypeFilter === f.key ? f.active : f.inactive}`}>
+                    {f.label} ({f.count})
+                  </button>
+                ))}
+              </div>
+
+              {/* Bed Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {sortedBeds.map((bed) => {
+                  const typeColors = {
+                    general: { border: 'border-blue-300', typeBadge: 'bg-blue-100 text-blue-700', availBg: 'bg-blue-50 hover:bg-blue-100' },
+                    icu: { border: 'border-orange-300', typeBadge: 'bg-orange-100 text-orange-700', availBg: 'bg-orange-50 hover:bg-orange-100' },
+                    emergency: { border: 'border-red-300', typeBadge: 'bg-red-100 text-red-700', availBg: 'bg-red-50 hover:bg-red-100' },
+                  };
+                  const tc = typeColors[bed.bed_type] || typeColors.general;
+                  const statusConfig = {
+                    available: { bg: tc.availBg, dot: 'bg-green-500', text: 'text-green-700', label: 'Available', cursor: 'cursor-pointer' },
+                    reserved: { bg: 'bg-yellow-50', dot: 'bg-yellow-500', text: 'text-yellow-700', label: 'Reserved', cursor: 'cursor-default' },
+                    occupied: { bg: 'bg-gray-100', dot: 'bg-red-500', text: 'text-red-600', label: 'Occupied', cursor: 'cursor-default' },
+                  };
+                  const sc = statusConfig[bed.status] || statusConfig.available;
+                  // Enrich occupied/reserved beds with patient info from state
+                  const occupiedInfo = bed.status === 'occupied' ? occupiedBeds.find(o => o.bed_id === bed.bed_id) : null;
+                  const reservedInfo = bed.status === 'reserved' ? reservedBeds.find(r => r.bed_id === bed.bed_id) : null;
+                  return (
+                    <div
+                      key={bed.bed_id}
+                      onClick={() => bed.status === 'available' && handleBedClick(bed)}
+                      className={`rounded-xl border-2 ${tc.border} ${sc.bg} ${sc.cursor} p-3 transition-all ${
+                        selectedBed?.bed_id === bed.bed_id ? 'ring-2 ring-green-500 ring-offset-1' : ''
+                      } ${bed.status !== 'available' ? 'opacity-70' : ''}`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${tc.typeBadge}`}>{bed.bed_type?.toUpperCase()}</span>
+                        <span className={`w-2.5 h-2.5 rounded-full ${sc.dot} mt-0.5`}></span>
+                      </div>
+                      <p className="text-base font-bold text-gray-800">{bed.bed_number}</p>
+                      <p className="text-xs text-gray-500">Ward {bed.ward_number}</p>
+                      <p className={`text-xs font-semibold mt-1.5 ${sc.text}`}>{sc.label}</p>
+                      {occupiedInfo && (
+                        <>
+                          <p className="text-xs font-semibold text-gray-700 mt-1 truncate" title={occupiedInfo.patient_name}>👤 {occupiedInfo.patient_name}</p>
+                          {occupiedInfo.admitted_at && (
+                            <p className="text-xs text-gray-400 mt-0.5">{new Date(occupiedInfo.admitted_at).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</p>
+                          )}
+                        </>
+                      )}
+                      {reservedInfo && (
+                        <p className="text-xs font-semibold text-yellow-700 mt-1 truncate" title={reservedInfo.patient_name}>👤 {reservedInfo.patient_name}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -688,27 +791,200 @@ const HospitalDashboard = () => {
         </div>
       )}
 
+          {/* Occupied Beds Tab */}
+          {activeTab === 'occupied-beds' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-800">Occupied Beds</h2>
+                <span className="bg-red-100 text-red-700 px-4 py-1 rounded-full text-sm font-semibold">
+                  {occupiedBeds.length} Occupied
+                </span>
+              </div>
+
+              {occupiedBeds.length === 0 ? (
+                <div className="bg-white rounded-xl shadow p-12 text-center">
+                  <div className="text-5xl mb-4">🛏️</div>
+                  <p className="text-gray-500 text-lg">No beds currently occupied</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl shadow overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-[#0b1f3a] text-white">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm">Bed</th>
+                        <th className="px-4 py-3 text-left text-sm">Ward</th>
+                        <th className="px-4 py-3 text-left text-sm">Type</th>
+                        <th className="px-4 py-3 text-left text-sm">Patient</th>
+                        <th className="px-4 py-3 text-left text-sm">Admitted At</th>
+                        <th className="px-4 py-3 text-left text-sm">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {occupiedBeds.map((bed) => (
+                        <tr key={bed.bed_id} className="border-t hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-bold text-gray-800">{bed.bed_number}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{bed.ward_number}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                              bed.bed_type === 'icu' ? 'bg-orange-100 text-orange-700' :
+                              bed.bed_type === 'emergency' ? 'bg-red-100 text-red-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>{bed.bed_type?.toUpperCase()}</span>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-800">{bed.patient_name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {bed.admitted_at ? new Date(bed.admitted_at).toLocaleString() : 'N/A'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => { setDischargeTarget(bed); setShowDischargeModal(true); }}
+                              className="bg-red-50 text-red-600 border border-red-300 px-3 py-1.5 rounded-lg hover:bg-red-100 font-semibold text-xs"
+                            >
+                              Discharge
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bed Requests Tab */}
+          {activeTab === 'bed-requests' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-800">Bed Reservation Requests</h2>
+                <span className="bg-yellow-100 text-yellow-800 px-4 py-1 rounded-full text-sm font-semibold">
+                  {reservedBeds.length} Pending
+                </span>
+              </div>
+
+              {reservedBeds.length === 0 ? (
+                <div className="bg-white rounded-lg shadow p-12 text-center">
+                  <div className="text-5xl mb-4">🛏️</div>
+                  <p className="text-gray-500 text-lg">No pending bed reservation requests</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {reservedBeds.map((bed) => (
+                    <div key={bed.bed_id} className="bg-white rounded-lg shadow border-l-4 border-yellow-400 p-5">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <p className="text-lg font-bold text-gray-800">Bed {bed.bed_number}</p>
+                          <p className="text-sm text-gray-500">Ward {bed.ward_number}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                            bed.bed_type === 'icu' ? 'bg-orange-100 text-orange-700' :
+                            bed.bed_type === 'emergency' ? 'bg-red-100 text-red-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>{bed.bed_type?.toUpperCase()}</span>
+                          <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700">RESERVED</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 mb-4 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Patient</span>
+                          <span className="font-semibold text-gray-800">{bed.patient_name}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Appointment Date</span>
+                          <span className="font-semibold text-gray-800">{bed.appointment_date || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Reserved At</span>
+                          <span className="font-semibold text-gray-800">{bed.reserved_at ? new Date(bed.reserved_at).toLocaleString() : 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Priority</span>
+                          <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                            bed.priority === 'emergency' ? 'bg-red-100 text-red-700' :
+                            bed.priority === 'elder' ? 'bg-orange-100 text-orange-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>{bed.priority?.toUpperCase() || 'NORMAL'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleConfirmBed(bed.bed_id, bed.patient_id)}
+                          className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 font-semibold text-sm"
+                        >
+                          ✓ Confirm Admission
+                        </button>
+                        <button
+                          onClick={() => handleRejectBed(bed.bed_id)}
+                          className="flex-1 bg-red-50 text-red-600 border border-red-300 py-2 rounded-lg hover:bg-red-100 font-semibold text-sm"
+                        >
+                          ✕ Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Pharmacy Tab */}
           {activeTab === 'pharmacy' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-800">Pharmacy Status</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white rounded-lg shadow p-6">
-                  <div className="text-4xl mb-2">📋</div>
-                  <p className="text-gray-600 text-sm">Prescriptions Pending</p>
-                  <p className="text-3xl font-bold text-yellow-600">0</p>
-                </div>
-                <div className="bg-white rounded-lg shadow p-6">
-                  <div className="text-4xl mb-2">✅</div>
-                  <p className="text-gray-600 text-sm">Prescriptions Ready</p>
-                  <p className="text-3xl font-bold text-green-600">0</p>
-                </div>
+              <h2 className="text-2xl font-bold text-gray-800">Pharmacy Stock Overview</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white rounded-lg shadow p-6">
                   <div className="text-4xl mb-2">⚠️</div>
-                  <p className="text-gray-600 text-sm">Low Stock Medicines</p>
-                  <p className="text-3xl font-bold text-red-600">0</p>
+                  <p className="text-gray-600 text-sm">Low / Out of Stock</p>
+                  <p className="text-3xl font-bold text-red-600">
+                    {pharmacyAlerts.filter(a => a.type === 'low_stock' || a.type === 'out_of_stock').length}
+                  </p>
+                </div>
+                <div className="bg-white rounded-lg shadow p-6">
+                  <div className="text-4xl mb-2">🗓️</div>
+                  <p className="text-gray-600 text-sm">Expiring / Expired</p>
+                  <p className="text-3xl font-bold text-orange-600">
+                    {pharmacyAlerts.filter(a => a.type === 'expiring_soon' || a.type === 'expired').length}
+                  </p>
+                </div>
+                <div className="bg-white rounded-lg shadow p-6">
+                  <div className="text-4xl mb-2">🔔</div>
+                  <p className="text-gray-600 text-sm">Total Active Alerts</p>
+                  <p className="text-3xl font-bold text-yellow-600">{pharmacyAlerts.length}</p>
                 </div>
               </div>
+              {pharmacyAlerts.length > 0 ? (
+                <div className="space-y-2">
+                  {pharmacyAlerts.map((alert, idx) => (
+                    <div key={idx} className={`border-l-4 px-4 py-3 rounded-lg ${
+                      alert.priority === 'critical' ? 'bg-red-50 border-red-500' :
+                      alert.priority === 'high' ? 'bg-orange-50 border-orange-500' :
+                      'bg-yellow-50 border-yellow-500'
+                    }`}>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">
+                            {alert.type === 'out_of_stock' ? '🚫' : alert.type === 'low_stock' ? '⚠️' : alert.type === 'expired' ? '☠️' : '⏰'}
+                            {' '}{alert.medicine_name}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-0.5">{alert.message}</p>
+                        </div>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${
+                          alert.priority === 'critical' ? 'bg-red-600 text-white' :
+                          alert.priority === 'high' ? 'bg-orange-500 text-white' :
+                          'bg-yellow-400 text-yellow-900'
+                        }`}>{alert.priority}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-lg">
+                  <p className="text-green-700 text-sm">✅ All pharmacy stock levels are healthy</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -747,37 +1023,165 @@ const HospitalDashboard = () => {
           )}
 
           {/* Alerts Tab */}
-          {activeTab === 'alerts' && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-800">Hospital Alerts</h2>
-              <div className="space-y-4">
-                {overview.available_beds < 5 && (
-                  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
-                    <h3 className="font-bold text-red-800">🚨 Bed Shortage Alert</h3>
-                    <p className="text-red-700 text-sm mt-1">Only {overview.available_beds} beds available</p>
+          {activeTab === 'alerts' && (() => {
+            const totalBeds = beds.length;
+            const availBeds = beds.filter(b => b.status === 'available').length;
+            const occBeds = beds.filter(b => b.status === 'occupied').length;
+            const occupancyPct = totalBeds > 0 ? Math.round((occBeds / totalBeds) * 100) : 0;
+            const bedCritical = totalBeds > 0 && availBeds === 0;
+            const bedWarning = !bedCritical && totalBeds > 0 && availBeds < 5;
+            const emergencyHigh = (stats.opd_analytics?.emergency_cases || 0) > 5;
+            const totalBedAlerts = (bedCritical ? 1 : 0) + (bedWarning ? 1 : 0) + (emergencyHigh ? 1 : 0);
+            return (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-gray-800">Hospital Alerts</h2>
+                  <button onClick={() => fetchHospitalData(user.user_id)} className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 font-semibold text-sm">🔄 Refresh</button>
+                </div>
+
+                {/* Bed Alerts — sourced from live beds state */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                    🛏️ Bed Alerts
+                    {totalBedAlerts > 0 && <span className="ml-2 bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">{totalBedAlerts}</span>}
+                  </h3>
+                  <div className="space-y-3">
+                    {bedCritical && (
+                      <div className="bg-red-50 border-l-4 border-red-600 p-4 rounded-lg flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-red-800">🚨 No Beds Available</p>
+                          <p className="text-red-700 text-sm mt-1">All {totalBeds} beds are occupied or reserved. Immediate action required.</p>
+                        </div>
+                        <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded">CRITICAL</span>
+                      </div>
+                    )}
+                    {bedWarning && (
+                      <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-lg flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-orange-800">⚠️ Low Bed Availability</p>
+                          <p className="text-orange-700 text-sm mt-1">Only {availBeds} of {totalBeds} beds available ({occupancyPct}% occupancy)</p>
+                        </div>
+                        <span className="bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded">HIGH</span>
+                      </div>
+                    )}
+                    {emergencyHigh && (
+                      <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-yellow-800">⚠️ High Emergency Load</p>
+                          <p className="text-yellow-700 text-sm mt-1">{stats.opd_analytics.emergency_cases} emergency cases in OPD queue</p>
+                        </div>
+                        <span className="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded">MEDIUM</span>
+                      </div>
+                    )}
+                    {!bedCritical && !bedWarning && !emergencyHigh && (
+                      <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-lg">
+                        <p className="text-green-700 text-sm">✅ Bed availability is normal — {availBeds} of {totalBeds} beds available ({occupancyPct}% occupancy)</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                {stats.opd_analytics?.emergency_cases > 5 && (
-                  <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
-                    <h3 className="font-bold text-yellow-800">⚠️ High Emergency Load</h3>
-                    <p className="text-yellow-700 text-sm mt-1">{stats.opd_analytics.emergency_cases} emergency cases in queue</p>
-                  </div>
-                )}
+                </div>
+
+                {/* Pharmacy Alerts — fetched from /pharmacy/alerts/{hospitalId} */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                    💊 Pharmacy Alerts
+                    {pharmacyAlerts.length > 0 && <span className="ml-2 bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">{pharmacyAlerts.length}</span>}
+                  </h3>
+                  {pharmacyAlerts.length === 0 ? (
+                    <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-lg">
+                      <p className="text-green-700 text-sm">✅ All pharmacy stock levels are healthy</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {pharmacyAlerts.map((alert, idx) => (
+                        <div key={idx} className={`border-l-4 rounded-lg p-4 ${
+                          alert.priority === 'critical' ? 'border-red-500 bg-red-50' :
+                          alert.priority === 'high' ? 'border-orange-400 bg-orange-50' :
+                          'border-yellow-400 bg-yellow-50'
+                        }`}>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-bold text-gray-800">
+                                {alert.type === 'out_of_stock' ? '🚫' : alert.type === 'low_stock' ? '⚠️' : alert.type === 'expired' ? '☠️' : '⏰'}
+                                {' '}{alert.medicine_name}
+                              </p>
+                              <p className="text-sm text-gray-600 mt-1">{alert.message}</p>
+                              {alert.stock !== undefined && (
+                                <p className="text-xs text-gray-500 mt-1">Stock: {alert.stock} units / Min threshold: {alert.threshold} units</p>
+                              )}
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                              alert.priority === 'critical' ? 'bg-red-600 text-white' :
+                              alert.priority === 'high' ? 'bg-orange-500 text-white' :
+                              'bg-yellow-400 text-yellow-900'
+                            }`}>{alert.priority}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </main>
       </div>
+
+      {/* Discharge Modal */}
+      {showDischargeModal && dischargeTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-bold mb-1">Discharge Patient</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              Bed <span className="font-semibold text-gray-800">{dischargeTarget.bed_number}</span> — Ward {dischargeTarget.ward_number} — Patient: <span className="font-semibold text-gray-800">{dischargeTarget.patient_name}</span>
+            </p>
+            <div className="mb-5">
+              <label className="block text-sm font-semibold mb-1">Discharge Note <span className="text-gray-400 font-normal">(optional)</span></label>
+              <textarea
+                rows="3"
+                value={dischargeNote}
+                onChange={(e) => setDischargeNote(e.target.value)}
+                placeholder="e.g. Patient recovered, follow-up in 2 weeks..."
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-5 text-sm text-yellow-800">
+              ⚠️ This will release the bed and record discharge time: <span className="font-semibold">{new Date().toLocaleString()}</span>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDischargeBed}
+                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg hover:bg-red-700 font-semibold"
+              >
+                Confirm Discharge
+              </button>
+              <button
+                onClick={() => { setShowDischargeModal(false); setDischargeTarget(null); setDischargeNote(''); }}
+                className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg hover:bg-gray-200 font-semibold"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Doctor Modal */}
       {showDoctorModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">Add New Doctor</h3>
+            <h3 className="text-xl font-bold mb-1">Add New Doctor</h3>
+            <p className="text-sm text-gray-500 mb-4">A login account will be created for the doctor.</p>
             <form onSubmit={handleAddDoctor} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold mb-1">Doctor Name</label>
-                <input type="text" required value={doctorForm.name} onChange={(e) => setDoctorForm({...doctorForm, name: e.target.value})} className="w-full border rounded px-3 py-2" />
+                <input type="text" required value={doctorForm.name}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    const firstName = name.replace(/Dr\.?\s*/i, '').split(' ')[0].toLowerCase();
+                    setDoctorForm({...doctorForm, name, email: firstName ? `${firstName}@gmail.com` : doctorForm.email});
+                  }}
+                  className="w-full border rounded px-3 py-2" placeholder="e.g. Dr. Rajesh Kumar" />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Department</label>
@@ -795,12 +1199,19 @@ const HospitalDashboard = () => {
                 <input type="tel" value={doctorForm.contact_number} onChange={(e) => setDoctorForm({...doctorForm, contact_number: e.target.value})} className="w-full border rounded px-3 py-2" />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-1">Email</label>
-                <input type="email" value={doctorForm.email} onChange={(e) => setDoctorForm({...doctorForm, email: e.target.value})} className="w-full border rounded px-3 py-2" />
+                <label className="block text-sm font-semibold mb-1">Login Email</label>
+                <input type="email" required value={doctorForm.email} onChange={(e) => setDoctorForm({...doctorForm, email: e.target.value})} className="w-full border rounded px-3 py-2" placeholder="Auto-filled from name" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1">Login Password</label>
+                <input type="text" required value={doctorForm.password} onChange={(e) => setDoctorForm({...doctorForm, password: e.target.value})} className="w-full border rounded px-3 py-2" placeholder="e.g. 12" />
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-800">
+                📋 Credentials to share: <strong>{doctorForm.email || 'email'}</strong> / <strong>{doctorForm.password || 'password'}</strong>
               </div>
               <div className="flex gap-2">
                 <button type="submit" className="flex-1 bg-[#0b1f3a] text-white py-2 rounded-lg hover:bg-blue-900">Add Doctor</button>
-                <button type="button" onClick={() => setShowDoctorModal(false)} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400">Cancel</button>
+                <button type="button" onClick={() => { setShowDoctorModal(false); setDoctorForm({ name: '', department_id: '', specialization: '', contact_number: '', email: '', password: '' }); }} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400">Cancel</button>
               </div>
             </form>
           </div>

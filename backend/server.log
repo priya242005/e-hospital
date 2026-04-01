@@ -1,0 +1,8 @@
+INFO:     Will watch for changes in these directories: ['c:\\Users\\priya\\OneDrive\\Desktop\\e-hospital\\backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [3092] using StatReload
+INFO:     Started server process [4828]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'venv\Lib\site-packages\bcrypt\__init__.py'. Reloading...
+ 

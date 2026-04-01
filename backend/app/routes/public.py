@@ -188,6 +188,42 @@ def get_pharmacy_alerts():
         "high_demand": high_demand
     }
 
+@router.get("/hospital-map")
+def get_hospital_map():
+    """Hospital locations with bed availability status for map"""
+    hospitals = list(db.collection("hospitals").stream())
+    result = []
+    for hospital in hospitals:
+        h_data = hospital.to_dict()
+        hospital_id = hospital.id
+        lat = h_data.get("latitude")
+        lng = h_data.get("longitude")
+        if not lat or not lng:
+            continue
+        beds = list(db.collection("bed_management").where("hospital_id", "==", hospital_id).stream())
+        total_beds = len(beds)
+        available_beds = sum(1 for b in beds if b.to_dict().get("status") == "available")
+        occupancy = ((total_beds - available_beds) / total_beds * 100) if total_beds > 0 else 0
+        if occupancy < 60:
+            status = "green"
+        elif occupancy < 85:
+            status = "yellow"
+        else:
+            status = "red"
+        result.append({
+            "hospital_id": hospital_id,
+            "hospital_name": h_data.get("hospital_name"),
+            "address": h_data.get("address"),
+            "city": h_data.get("city"),
+            "contact_number": h_data.get("contact_number"),
+            "latitude": lat,
+            "longitude": lng,
+            "total_beds": total_beds,
+            "available_beds": available_beds,
+            "status": status
+        })
+    return result
+
 @router.get("/nearby-hospitals")
 def get_nearby_hospitals(latitude: float = 28.6139, longitude: float = 77.2090):
     """Nearby Hospital Finder - Mock distance calculation"""

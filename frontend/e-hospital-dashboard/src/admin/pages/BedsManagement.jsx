@@ -5,7 +5,6 @@ const API_BASE = 'http://localhost:8000';
 
 export default function BedsManagement() {
   const [beds, setBeds] = useState([]);
-  const [hospitals, setHospitals] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -15,21 +14,12 @@ export default function BedsManagement() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [bedsRes, hospitalsRes] = await Promise.all([
-        axios.get(`${API_BASE}/beds`),
-        axios.get(`${API_BASE}/hospitals`)
-      ]);
+      const bedsRes = await axios.get(`${API_BASE}/beds/admin/summary`);
       setBeds(bedsRes.data);
-      setHospitals(hospitalsRes.data);
     } catch (error) {
       console.error('Error fetching data:', error);
     }
     setLoading(false);
-  };
-
-  const getHospitalName = (hospitalId) => {
-    const hospital = hospitals.find(h => h.hospital_id === hospitalId);
-    return hospital?.hospital_name || 'Unknown Hospital';
   };
 
   const getStatusColor = (status) => {
@@ -74,7 +64,7 @@ export default function BedsManagement() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {beds.map((bed) => (
           <div key={bed.hospital_id} className="bg-white rounded-lg shadow-lg p-6 border-t-4 border-blue-900">
-            <h3 className="text-xl font-bold mb-4">{getHospitalName(bed.hospital_id)}</h3>
+            <h3 className="text-xl font-bold mb-4">{bed.hospital_name}</h3>
             
             <div className="space-y-3">
               <div className="flex justify-between items-center">

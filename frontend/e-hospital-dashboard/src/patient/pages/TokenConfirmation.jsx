@@ -96,6 +96,18 @@ const TokenConfirmation = () => {
             </div>
           </div>
 
+          {tokenData.bed_reserved && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+              <p className="font-semibold text-green-800 mb-2">🛏️ Bed Reserved</p>
+              <div className="space-y-1 text-sm text-green-700">
+                <p>Bed Number: <span className="font-bold">{tokenData.bed_number}</span></p>
+                <p>Ward: <span className="font-bold">{tokenData.ward_number}</span></p>
+                <p>Type: <span className="font-bold capitalize">{tokenData.bed_type}</span></p>
+                <p className="text-xs text-green-600 mt-2">Status: Reserved — will be confirmed by hospital staff after consultation</p>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3">
             <button
               onClick={() => navigate('/my-appointments')}

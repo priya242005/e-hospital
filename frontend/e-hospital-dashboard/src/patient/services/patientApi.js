@@ -28,7 +28,7 @@ const patientApi = {
       headers: getAuthHeader()
     }),
   
-  getBeds: () => axios.get(`${API_BASE_URL}/beds`, { headers: getAuthHeader() }),
+  getAllBedsSummary: () => axios.get(`${API_BASE_URL}/beds/admin/summary`),
   
   getPharmacyQueue: () => axios.get(`${API_BASE_URL}/pharmacy_queue`, { headers: getAuthHeader() }),
   
@@ -55,12 +55,22 @@ const patientApi = {
       headers: getAuthHeader()
     }),
   
-  createAppointment: (data) => 
-    axios.post(`${API_BASE_URL}/appointments`, data, { headers: getAuthHeader() }),
+  createAppointment: (data, bedId = null) => 
+    axios.post(
+      `${API_BASE_URL}/appointments${bedId ? `?bed_id=${bedId}` : ''}`,
+      data,
+      { headers: getAuthHeader() }
+    ),
   
   getUserAppointments: (userId) =>
     axios.get(`${API_BASE_URL}/appointments/by-patient/${userId}`, { headers: getAuthHeader() }),
   
+  getAvailableBeds: (hospitalId) =>
+    axios.get(`${API_BASE_URL}/beds/available/${hospitalId}`, { headers: getAuthHeader() }),
+
+  getBedByAppointment: (appointmentId) =>
+    axios.get(`${API_BASE_URL}/beds/by-appointment/${appointmentId}`, { headers: getAuthHeader() }),
+
   getWaitingTime: (token) =>
     axios.get(`${API_BASE_URL}/opd/waiting-time/${token}`, {
       headers: getAuthHeader()
